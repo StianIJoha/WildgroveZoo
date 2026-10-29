@@ -195,6 +195,15 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
 .wbody ul { margin: 0 0 10px; padding-left: 18px; font-weight: 700; line-height: 1.6; }
 .modal .row { justify-content: flex-end; margin: 12px 0 0; }
 
+.chip.bump { animation: bump .35s ease-out; }
+@keyframes bump { 40% { transform: scale(1.12); } }
+.lvsheet { text-align: center; padding-top: 34px !important; }
+.lvsheet .row { justify-content: center !important; }
+.lvbadge { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: var(--leaf); color: #fff; font-family: var(--f-display); font-weight: 900; font-size: 30px; display: grid; place-items: center; box-shadow: 0 0 0 5px var(--paper), 0 6px 16px rgba(0,0,0,.25); }
+.unlocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin: 6px 0 4px; max-height: min(46vh, 420px); overflow-y: auto; padding: 2px; }
+.unlock { background: #fff; border-radius: 14px; padding: 8px 6px; box-shadow: inset 0 0 0 1.5px var(--line); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.unlock b { font-size: 13px; line-height: 1.2; }
+.unlock small { font-size: 10.5px; color: var(--ink-soft); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .warnchip { background: #ffe3e0; color: #8a2a26; font-size: 13px; animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 50% { transform: scale(1.04); } }
 .taskhead { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 8px; font-family: var(--f-display); font-size: 15px; }
@@ -319,6 +328,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
 
   <div class="toast" id="toast" role="status"></div>
   <div class="modal" id="welcome" hidden><div class="sheet"><h2>Welcome back, director</h2><div class="wbody"></div><div class="row"><button class="btn" id="welcomeOk">Back to the zoo</button></div></div></div>
+  <div class="modal" id="levelUp" hidden><div class="sheet lvsheet"><div class="lvbadge" id="lvNum">2</div><h2>Level up!</h2><p class="wbody">+<span id="lvGems">3</span> gems. Here's what's new:</p><div class="unlocks"></div><p class="wbody lvnone">Nothing new this level, but you're closer to the next unlock.</p><div class="row"><button class="btn gold" id="levelOk">Let's build</button></div></div></div>
   <div class="modal" id="reward" hidden><div class="sheet"><h2>Reward</h2><div class="wbody"></div><div class="row"><button class="btn gold" id="rewardOk">Great!</button></div></div></div>
   <div class="modal" id="saveModal" hidden><div class="sheet savesheet"><h2>Save code &amp; backup</h2>
     <p class="wbody">Your zoo is saved in this browser automatically. To move it to another device or browser, copy this code or download the file, then load it there.</p>

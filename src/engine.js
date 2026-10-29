@@ -140,9 +140,28 @@ function addXp(n) {
     S.xp -= xpFor(S.level); S.level++; S.gems += 3;
     const unl = [...Object.values(SPECIES), ...Object.values(SHOPS), ...Object.values(BUILDINGS), ...Object.values(BIOMES)].filter(x => x.lvl === S.level).map(x => x.name);
     const exp = EXPANSIONS.find(e => e.lvl === S.level);
-    toast(`Level ${S.level}! +3 gems` + (unl.length ? ` · New: ${unl.join(', ')}` : '') + (exp ? ' · Land expansion available' : ''), 'level');
-    sfx('level');
+    if (S.tut >= 0 || !document.getElementById('levelUp')) toast(`Level ${S.level}! +3 gems` + (unl.length ? ` · New: ${unl.join(', ')}` : '') + (exp ? ' · Land expansion available' : ''), 'level');
+    else levelCard(S.level, !!exp);
+    sfx('level'); burst();
   }
+}
+// level-up card: lists everything that unlocked at this level, with pictures
+let lvGained = 0;
+function levelCard(lvl, exp) {
+  const L = [];
+  for (const [k, d] of Object.entries(SPECIES)) if (d.lvl === lvl) L.push({ c: iconCanvas(k, 52, 'animal'), name: d.name, kind: `${BIOMES[d.biome].name} animal` });
+  for (const [k, d] of Object.entries(BIOMES)) if (d.lvl === lvl) L.push({ c: iconCanvas(k, 52, 'enc'), name: `${d.name} enclosure`, kind: 'Habitat' });
+  for (const [k, d] of Object.entries(SHOPS)) if (d.lvl === lvl) L.push({ c: iconCanvas(k, 52, 'decor'), name: d.name, kind: 'Shop' });
+  for (const [k, d] of Object.entries(BUILDINGS)) if (d.lvl === lvl) L.push({ c: iconCanvas(k, 52, 'decor'), name: d.name, kind: 'Building' });
+  for (const [k, d] of Object.entries(DECOR)) if (d.lvl === lvl && !d.event && lvl > 1) L.push({ c: iconCanvas(k, 52, 'decor'), name: d.name, kind: 'Decor' });
+  if (exp) L.push({ c: iconCanvas('expand', 44, 'icon'), name: 'More land', kind: 'Zoo office' });
+  // several levels at once (a big reward, offline time) stack into one card
+  const m = $('#levelUp'), box = m.querySelector('.unlocks');
+  if (m.hidden) { box.innerHTML = ''; lvGained = 0; }
+  lvGained++; $('#lvNum').textContent = lvl; $('#lvGems').textContent = 3 * lvGained;
+  for (const u of L) { const d = el('div', 'unlock'); d.appendChild(u.c); d.appendChild(el('b', '', u.name)); d.appendChild(el('small', '', u.kind)); box.appendChild(d); }
+  m.querySelector('.lvnone').hidden = !!box.children.length;
+  m.hidden = false;
 }
 function grant(p, at) {
   const parts = [];
@@ -859,6 +878,22 @@ function drawNight(dk, on) {
     if (k > 0.25) { ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
   }
   ctx.restore();
+  drawConfetti();
+}
+let confetti = [];
+function burst() {
+  if (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cols = ['#f2b632', '#3f8f4e', '#d9534f', '#3fa7b5', '#9a6fc9', '#ef7aa0'];
+  for (let i = 0; i < 90; i++) confetti.push({ x: W / 2 + (rnd() - 0.5) * 120, y: H * 0.3, vx: (rnd() - 0.5) * 520, vy: -180 - rnd() * 420, r: rnd() * 6, vr: (rnd() - 0.5) * 12, c: pick(cols), s: 4 + rnd() * 4, t: 0 });
+}
+function drawConfetti() {
+  if (!confetti.length) return;
+  const dt = 1 / 60;
+  ctx.save();
+  for (const p of confetti) { p.t += dt; p.vy += 700 * dt; p.vx *= 0.99; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+    ctx.globalAlpha = Math.max(0, 1 - p.t / 2.6); ctx.fillStyle = p.c; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }
+  ctx.restore();
+  confetti = confetti.filter(p => p.t < 2.6 && p.y < H + 20);
 }
 const isMoving = o => tool && tool.kind === 'move' && tool.obj === o;
 function drawObj(o, c) {
@@ -1160,7 +1195,10 @@ function pay(c) { if (!canPay(c)) { toast('Not enough ' + (S.coins < (c.coins ||
 function closeSheets() { for (const id of ['#shop', '#storage', '#quests', '#hub']) $(id).hidden = true; document.body.classList.remove('sheet-open'); }
 function openSheet(id) { const was = !$(id).hidden; closeSheets(); select(null); if (!was) { $(id).hidden = false; document.body.classList.add('sheet-open'); } return !was; }
 
+const hudPrev = {};
+function bumpChip(id, v) { if (hudPrev[id] != null && v > hudPrev[id]) { const c = $(id).parentElement; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } hudPrev[id] = v; }
 function updateHUD() {
+  bumpChip('#coins', S.coins); bumpChip('#gems', S.gems); bumpChip('#paws', S.paws);
   $('#coins').textContent = fmt(S.coins); $('#gems').textContent = S.gems; $('#paws').textContent = S.paws;
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
@@ -1892,6 +1930,7 @@ function wireUI() {
   $('#toolCancel').onclick = () => setTool(null);
   $('#welcomeOk').onclick = () => $('#welcome').hidden = true;
   $('#rewardOk').onclick = () => $('#reward').hidden = true;
+  $('#levelOk').onclick = () => $('#levelUp').hidden = true;
   $('#tutSkip').onclick = skipTutorial;
   $('#tutOk').onclick = () => finishTutorial();
   $('#btnSound').onclick = () => { S.settings.muted = !S.settings.muted; applySettings(); if (!muted) audioUnlock(); dirty(); };
@@ -1930,5 +1969,5 @@ const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
 window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
-  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, ensureEvent, eventPoints, claimEvent };
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, addXp, ensureEvent, eventPoints, claimEvent };
 })();
