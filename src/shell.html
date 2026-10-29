@@ -26,7 +26,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .ic { display: inline-flex; vertical-align: -3px; }
-.ic canvas { display: block; }
+.ic canvas, .ic img { display: block; }
 .pt { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; margin-right: 4px; }
 .pt.no { color: var(--berry); }
 
@@ -195,6 +195,26 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
 .wbody ul { margin: 0 0 10px; padding-left: 18px; font-weight: 700; line-height: 1.6; }
 .modal .row { justify-content: flex-end; margin: 12px 0 0; }
 
+.warnchip { background: #ffe3e0; color: #8a2a26; font-size: 13px; animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+.taskhead { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 8px; font-family: var(--f-display); font-size: 15px; }
+.taskhead span { font-family: var(--f-ui); font-size: 11px; font-weight: 800; color: var(--ink-soft); }
+.quest.claimed { opacity: .55; box-shadow: inset 0 0 0 1.5px var(--line); background: var(--paper-2); }
+.quest.bonus { background: #f4ecff; box-shadow: inset 0 0 0 1.5px #d9c6f2; }
+.quest.bonus.done { box-shadow: inset 0 0 0 2px var(--lilac); }
+.toys { margin-bottom: 8px; }
+.toys .row { margin-bottom: 0; gap: 6px; }
+.toychip { background: #eef8ea; color: var(--leaf-deep); border-radius: 9px; padding: 4px 9px; font-weight: 800; font-size: 11.5px; display: inline-flex; gap: 4px; align-items: center; }
+.savesheet { max-height: calc(100vh - 32px); overflow-y: auto; }
+.savesheet h3 { margin: 14px 0 4px; }
+.savesheet .row { justify-content: flex-start; margin: 8px 0 0; }
+.savesheet .row:last-child { justify-content: flex-end; }
+.savesheet textarea { width: 100%; font: 600 11px/1.35 ui-monospace, Menlo, Consolas, monospace; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; padding: 8px 10px; resize: vertical; color: var(--ink); user-select: text; }
+.filebtn { cursor: pointer; }
+.savemsg { font-size: 12.5px; font-weight: 800; color: var(--leaf-deep); margin: 8px 0 0; min-height: 1em; }
+.restock { background: #fff8e3; box-shadow: inset 0 0 0 1.5px #f0d590; }
+.toolhint #toolUndo { background: rgba(255,255,255,.08); }
+
 @media (max-width: 680px) {
   .brand { display: none; }
   .xp, .meter { width: 58px; }
@@ -226,14 +246,16 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
     <button class="chip level" id="meterChip" title="Zoo meter: animal mood, tidiness, variety, decor and babies. Tap for the breakdown."><div class="meter"><span class="meterlbl">Zoo meter</span><i><b id="meterfill"></b></i><span id="metertext">0%</span></div></button>
     <div class="chip small"><span id="icoVis"></span><span id="visitors">0</span><span class="lbl">visitors</span></div>
     <div class="chip small"><span id="icoStar"></span><span id="stars">0</span><span class="lbl">stars</span></div>
+    <button class="chip warnchip" id="lowFood" hidden title="Some animals will soon go hungry. Tap to buy food."></button>
     <div class="spacer"></div>
+    <button class="iconbtn" id="btnDay" aria-label="Time of day" hidden></button>
     <button class="iconbtn" id="btnZoomOut" aria-label="Zoom out">−</button>
     <button class="iconbtn" id="btnZoomIn" aria-label="Zoom in">+</button>
     <button class="iconbtn" id="btnSound" aria-label="Sound and music" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg></button>
   </div>
 
   <section id="quests" class="sheet" hidden>
-    <div class="shead"><h2>Director's goals</h2><span class="spacer"></span><button class="x" data-close aria-label="Close goals">×</button></div>
+    <div class="shead"><h2>Tasks &amp; goals</h2><span class="spacer"></span><button class="x" data-close aria-label="Close goals">×</button></div>
     <div id="questList"></div>
   </section>
 
@@ -260,7 +282,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
       <div class="trow"><button class="linkbtn" id="tutSkip">Skip tutorial</button><button class="btn" id="tutOk" hidden>Let's go</button></div></div>
   </div>
 
-  <div class="toolhint" id="toolHint" hidden><span id="toolHintText"></span><button id="toolCancel">Done</button></div>
+  <div class="toolhint" id="toolHint" hidden><span id="toolHintText"></span><button id="toolUndo" hidden title="Undo the last placement (Ctrl+Z)">Undo</button><button id="toolCancel">Done</button></div>
 
   <nav class="dock" aria-label="Tools">
     <button class="tool primary" id="btnShop" data-tool="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>Build</button>
@@ -274,5 +296,15 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
   <div class="toast" id="toast" role="status"></div>
   <div class="modal" id="welcome" hidden><div class="sheet"><h2>Welcome back, director</h2><div class="wbody"></div><div class="row"><button class="btn" id="welcomeOk">Back to the zoo</button></div></div></div>
   <div class="modal" id="reward" hidden><div class="sheet"><h2>Reward</h2><div class="wbody"></div><div class="row"><button class="btn gold" id="rewardOk">Great!</button></div></div></div>
+  <div class="modal" id="saveModal" hidden><div class="sheet savesheet"><h2>Save code &amp; backup</h2>
+    <p class="wbody">Your zoo is saved in this browser automatically. To move it to another device or browser, copy this code or download the file, then load it there.</p>
+    <textarea id="saveOut" readonly rows="3" aria-label="Your save code"></textarea>
+    <div class="row wrap"><button class="btn" id="saveCopy">Copy code</button><button class="btn ghost" id="saveDownload">Download file</button></div>
+    <h3>Load a zoo</h3>
+    <p class="wbody">This replaces the zoo in this browser.</p>
+    <textarea id="saveIn" rows="3" placeholder="Paste a save code here" aria-label="Save code to load"></textarea>
+    <div class="row wrap"><label class="btn ghost filebtn">Open file…<input type="file" id="saveFile" accept=".json,application/json,text/plain" hidden></label><button class="btn" id="saveLoad">Load this zoo</button></div>
+    <p class="savemsg" id="saveMsg" role="status"></p>
+    <div class="row"><button class="btn ghost" id="saveClose">Close</button></div></div></div>
   <div class="modal" id="resetConfirm" hidden><div class="sheet"><h2>Start a new zoo?</h2><p class="wbody">This erases your current zoo, animals and coins in this browser.</p><div class="row"><button class="btn ghost" id="resetNo">Keep my zoo</button><button class="btn" style="background:var(--berry);box-shadow:inset 0 -3px 0 #a33a37" id="resetYes">Start over</button></div></div></div>
 </div>

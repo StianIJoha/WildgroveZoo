@@ -9,6 +9,7 @@ const BIOMES = {
   desert:  { name: 'Dunes',        lvl: 4, cost: 500,  g1: '#f0d7a1', g2: '#e8cb8e', fence: '#a0704a', rail: '#c9935f' },
   bamboo:  { name: 'Bamboo grove', lvl: 3, cost: 500,  g1: '#7fbf68', g2: '#74b35e', fence: '#6f8f3e', rail: '#9cbf5a' },
   savanna: { name: 'Savanna',      lvl: 6, cost: 900,  g1: '#e3cf86', g2: '#d8c277', fence: '#8f6540', rail: '#b88452' },
+  coast:   { name: 'Coast',        lvl: 5, cost: 700,  g1: '#eadfb8', g2: '#e1d4aa', fence: '#6f8792', rail: '#a3bac4', pool: true },
 };
 
 // appeal = attraction stars per adult; care = need-interval multiplier; breed/grow in seconds
@@ -27,7 +28,12 @@ const SPECIES = {
   lion:      { name: 'Lion',       lvl: 10, cost: 1600, food: 'meat',    appeal: 22, biome: 'savanna', breed: 520, grow: 1000, speed: 0.45, care: 1.25 },
   giraffe:   { name: 'Giraffe',    lvl: 12, cost: 2000, food: 'hay',     appeal: 26, biome: 'savanna', breed: 560, grow: 1080, speed: 0.4,  care: 1.25 },
   elephant:  { name: 'Elephant',   lvl: 14, cost: 3000, food: 'hay',     appeal: 32, biome: 'lagoon',  breed: 600, grow: 1200, speed: 0.3,  care: 1.3 },
+  seal:      { name: 'Seal',       lvl: 5,  cost: 480,  food: 'fish',    appeal: 10, biome: 'coast',   breed: 330, grow: 640,  speed: 0.35, care: 1.0 },
+  otter:     { name: 'Otter',      lvl: 8,  cost: 950,  food: 'fish',    appeal: 16, biome: 'coast',   breed: 430, grow: 840,  speed: 0.7,  care: 1.1 },
+  turtle:    { name: 'Sea turtle', lvl: 11, cost: 1800, food: 'kelp',    appeal: 24, biome: 'coast',   breed: 540, grow: 1040, speed: 0.2,  care: 1.2 },
 };
+// how far above the feet the need icon floats, per species (default 42)
+const SPECIES_TOP = { giraffe: 66, crocodile: 22, elephant: 50, seal: 24, otter: 28, turtle: 20, bunny: 34, meerkat: 36 };
 
 const FOODS = {
   hay:     { name: 'Hay',     price: 3 },
@@ -37,8 +43,10 @@ const FOODS = {
   fish:    { name: 'Fish',    price: 6 },
   bamboo:  { name: 'Bamboo',  price: 6 },
   meat:    { name: 'Meat',    price: 9 },
+  kelp:    { name: 'Kelp',    price: 7 },
 };
 const MEDICINE_PRICE = 25;
+const START_MEDICINE = 5;
 
 // base need intervals (seconds); multiplied by species.care and a little randomness
 const NEED_BASE = { food: 300, water: 240, pet: 420, play: 540 };
@@ -74,7 +82,24 @@ const DECOR = {
   lamp:     { name: 'Lamp post',   lvl: 2, cost: 50,  appeal: 1.5 },
   toilet:   { name: 'Restrooms',   lvl: 3, cost: 300, appeal: 4 },
   fountain: { name: 'Fountain',    lvl: 4, cost: 400, appeal: 6 },
+  hedge:    { name: 'Box hedge',   lvl: 2, cost: 25,  appeal: 0.8 },
+  torch:    { name: 'Tiki torch',  lvl: 3, cost: 60,  appeal: 1.5, light: true },
+  picnic:   { name: 'Picnic table', lvl: 3, cost: 120, appeal: 2.5, rest: true },
+  pond:     { name: 'Lily pond',   lvl: 4, cost: 250, appeal: 4 },
+  playground: { name: 'Playground', lvl: 5, cost: 450, appeal: 5 },
+  statue:   { name: 'Animal statue', lvl: 6, cost: 600, appeal: 7 },
+  arch:     { name: 'Flower arch', lvl: 7, cost: 500, appeal: 5.5 },
 };
+DECOR.lamp.light = true; DECOR.bench.rest = true;
+
+// enrichment toys placed inside an enclosure: each adds mood and makes the play need last longer
+const TOYS = {
+  toyBall: { name: 'Play ball',      cost: { coins: 150, paws: 2 } },
+  toyLog:  { name: 'Climbing log',   cost: { coins: 300, paws: 3 } },
+  toyTire: { name: 'Tyre swing',     cost: { coins: 500, paws: 4 } },
+  toyPost: { name: 'Scratching post', cost: { coins: 700, paws: 5 } },
+};
+const TOY_SLOTS = 2, TOY_MOOD = 0.06, TOY_PLAY = 0.3;
 
 // land: owned area grows toward the top-left of the map
 const EXPANSIONS = [
@@ -101,6 +126,7 @@ const HELPERS = {
   water: { name: 'Water carrier',   desc: 'Keeps every water trough full.',             gems: 2, hours: 2 },
   pet:   { name: 'Cuddle keeper',   desc: 'Pets and plays with every animal.',          gems: 3, hours: 2 },
   clean: { name: 'Groundskeeper',   desc: 'Cleans enclosures and picks up litter.',     gems: 3, hours: 2 },
+  vet:   { name: 'Zoo vet',         desc: 'Treats sick animals with your medicine stock.', gems: 2, hours: 2 },
 };
 
 const SAFARI = [
@@ -154,6 +180,12 @@ const COLLECTIONS = {
     'Some bamboo grows almost a metre in one day.',
     'Capuchin monkeys use stones as tools to crack open nuts.',
     'Pandas have a thumb-like wrist bone that helps them grip bamboo.' ] },
+  coast: { name: 'Coast collection', reward: { coins: 1600, xp: 240, gems: 4, item: 'pond' }, cards: [
+    'Seals can sleep underwater and surface to breathe without waking up.',
+    'Sea otters hold hands while they sleep so they do not drift apart.',
+    'A sea turtle can hold its breath for several hours while resting.',
+    'Otters keep a favourite stone in a pouch of skin under their arm.',
+    'Baby sea turtles find the sea by heading toward the brightest horizon.' ] },
   savanna: { name: 'Savanna collection', reward: { coins: 2500, xp: 320, gems: 5, item: 'oak' }, cards: [
     'No two zebras have exactly the same stripe pattern.',
     'A giraffe\'s tongue can be about 45 cm long and is dark to resist sunburn.',
@@ -187,6 +219,24 @@ const QUESTS = [
   { id: 'g21', text: 'Own a 5th-degree subspecies',        goal: 1,  prog: (S, Z) => Z.maxVariant() >= 4 ? 1 : 0,  reward: { coins: 15000, xp: 1500, gems: 15 } },
 ];
 
+// daily tasks: three at a time, refreshed every TASK_EVERY ms of real time. stat is a key in S.stats
+// (or 'care:<species>' for per-species care); n scales with level; reward scales too.
+const DAILY = [
+  { id: 'care',    stat: 'care',         text: n => `Care for animals ${n} times`,       n: l => 25 + l * 3 },
+  { id: 'careSp',  stat: 'care:',        text: (n, sp) => `Care for ${sp} ${n} times`,  n: l => 8 + l },
+  { id: 'shops',   stat: 'shopCollects', text: n => `Collect from shops ${n} times`,    n: l => 6 + Math.floor(l / 2) },
+  { id: 'litter',  stat: 'litter',       text: n => `Pick up ${n} pieces of litter`,    n: l => 8 + l },
+  { id: 'dung',    stat: 'dung',         text: n => `Clean up ${n} dung piles`,         n: l => 6 + l },
+  { id: 'wishes',  stat: 'wishes',       text: n => `Grant ${n} visitor wishes`,        n: l => 3 + Math.floor(l / 3) },
+  { id: 'babies',  stat: 'babies',       text: n => `Welcome ${n} baby animal${n > 1 ? 's' : ''}`, n: l => 1 + Math.floor(l / 8) },
+  { id: 'guests',  stat: 'visitorsIn',   text: n => `Welcome ${n} visitors`,            n: l => 40 + l * 10 },
+  { id: 'earn',    stat: 'earned',       text: n => `Earn ${n.toLocaleString('en-US')} coins`, n: l => 500 + l * 250 },
+];
+const TASK_EVERY = 4 * 3600 * 1000;
+
+// day/night: one full day takes DAY_LENGTH game seconds; night darkens the zoo, lights glow, fewer visitors
+const DAY_LENGTH = 900;
+
 const TUTORIAL = [
   { text: 'Welcome to Wildgrove, director! I\'m Tilda, your head keeper. Oh no, the delivery crate burst open and three penguins escaped! Tap each penguin to catch it.', mood: 'surprised', until: 'caught' },
   { text: 'Phew, all caught! They\'re waiting in your storage. They need a home: open Build, choose Enclosures and place an Ice floe enclosure on a free spot.', mood: 'happy', until: 'iceBuilt' },
@@ -204,5 +254,5 @@ const VISITOR_SKINS = ['#f6d3b3', '#e8b48f', '#c98e64', '#9a6644', '#6e4630'];
 const VISITOR_HAIRS = ['#2b1d14', '#5a3a22', '#c78a3b', '#1d1d1d', '#8a4b2a', '#e0c070'];
 const NAMES = ['Pip', 'Mochi', 'Biscuit', 'Juniper', 'Pebble', 'Clover', 'Nori', 'Waffle', 'Hazel', 'Tofu', 'Maple', 'Ziggy', 'Olive', 'Pickles', 'Rumi', 'Saffron', 'Bean', 'Kiwi', 'Marlo', 'Fig', 'Sunny', 'Bramble', 'Poppy', 'Taro', 'Luna', 'Otis', 'Willow', 'Nugget', 'Cosmo', 'Dot', 'Honey', 'Basil', 'Jasper', 'Mabel', 'Gus', 'Ivy', 'Peanut', 'Ruby', 'Sprout', 'Theo', 'Frida', 'Odin', 'Sigrid', 'Bjørn', 'Tuva'];
 
-return { BIOMES, SPECIES, FOODS, MEDICINE_PRICE, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
+return { BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
 })();

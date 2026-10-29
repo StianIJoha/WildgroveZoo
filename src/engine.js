@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const G = GAME;
-const { BIOMES, SPECIES, FOODS, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, COLLECTIONS, QUESTS, TUTORIAL } = G;
+const { BIOMES, SPECIES, FOODS, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, COLLECTIONS, QUESTS, TUTORIAL, TOYS, DAILY } = G;
 
 // ---------- constants ----------
 const N = 30;
@@ -27,18 +27,31 @@ function newGame() {
     v: 2, coins: 1200, gems: 10, paws: 0, xp: 0, level: 1, clock: 0,
     owned: 0, objects: [], paths: [], litter: [],
     storage: { animals: [], items: [] },
-    food: { hay: 10, seeds: 0, fruit: 0, insects: 0, fish: 20, bamboo: 0, meat: 0 }, medicine: 2,
-    helpers: { food: 0, water: 0, pet: 0, clean: 0 },
+    food: { hay: 10, seeds: 0, fruit: 0, insects: 0, fish: 20, bamboo: 0, meat: 0, kelp: 0 }, medicine: G.START_MEDICINE,
+    helpers: {},
     claimed: [], cards: {}, collectionsDone: [],
-    stats: { paths: 0, care: 0, litter: 0, shopCollects: 0, babies: 0, peakMeter: 0, collections: 0, safaris: 0, peakVisitors: 0, labUp: 0, expansions: 0, earned: 0 },
+    stats: {},
     tut: 0, escaped: [], wheelNext: 0, savedAt: Date.now(), cam: null,
   };
-  for (const b of Object.keys(COLLECTIONS)) s.cards[b] = [0, 0, 0, 0, 0];
+  migrate(s);
   s.objects.push({ id: 'gate', kind: 'gate', type: 'gate', gx: GATE.x, gy: GATE.y, w: 1, h: 1, fixed: true });
   for (let x = GATE.x - 1; x >= GATE.x - 4; x--) s.paths.push(x + ',' + GATE.y);
   s.objects.push({ id: 'crate', kind: 'deco', type: 'crate', gx: GATE.x - 3, gy: GATE.y - 2, w: 1, h: 1 });
   for (let i = 0; i < 3; i++) s.escaped.push({ id: 'esc' + i, sex: i === 0 ? 'm' : 'f', x: GATE.x - 4 + i * 1.3, y: GATE.y - 3.5 + (i % 2), tx: null, ty: null, wait: rnd() * 2, flip: false, moving: false, phase: rnd() * 9 });
   scatterWild(s, 0);
+  return s;
+}
+// fills in anything an older save is missing, so new systems never see undefined
+function migrate(s) {
+  const stats = { paths: 0, care: 0, litter: 0, shopCollects: 0, babies: 0, peakMeter: 0, collections: 0, safaris: 0, peakVisitors: 0, labUp: 0, expansions: 0, earned: 0, dung: 0, wishes: 0, visitorsIn: 0, careBy: {} };
+  s.stats = Object.assign(stats, s.stats);
+  for (const k of Object.keys(FOODS)) if (typeof s.food[k] !== 'number') s.food[k] = 0;
+  for (const k of Object.keys(HELPERS)) if (typeof s.helpers[k] !== 'number') s.helpers[k] = 0;
+  for (const b of Object.keys(COLLECTIONS)) if (!s.cards[b]) s.cards[b] = [0, 0, 0, 0, 0];
+  if (!s.tasks) s.tasks = { next: 0, list: [] };
+  if (!s.wishLog) s.wishLog = {};
+  s.settings = Object.assign({ muted: false, music: true, night: true }, s.settings);
+  for (const o of s.objects) if (o.kind === 'enc' && !o.toys) o.toys = [];
   return s;
 }
 function ownedRect(idx) { const e = EXPANSIONS[idx]; return { x0: N - e.ox, y0: N - e.oy }; }
@@ -59,11 +72,35 @@ function scatterWild(s, idx) {
 }
 
 // ---------- save / load ----------
-function load() { try { const raw = localStorage.getItem(SAVE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) return s; } } catch (e) {} return null; }
+function load() { try { const raw = localStorage.getItem(SAVE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) return migrate(s); } } catch (e) {} return null; }
+const serialize = () => JSON.stringify(S, (k, v) => k.startsWith('_') ? undefined : v);
 function save() {
   if (!S) return;
   S.savedAt = Date.now(); S.cam = { x: cam.x, y: cam.y, z: cam.z };
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S, (k, v) => k.startsWith('_') ? undefined : v)); } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, serialize()); } catch (e) {}
+}
+// export: a base64 code you can copy, plus a .json download; import accepts either
+function exportCode() { save(); return btoa(unescape(encodeURIComponent(serialize()))); }
+function parseSave(text) {
+  text = String(text || '').trim(); if (!text) return null;
+  let raw = text;
+  if (text[0] !== '{') { try { raw = decodeURIComponent(escape(atob(text.replace(/\s+/g, '')))); } catch (e) { return null; } }
+  try { const s = JSON.parse(raw); if (s && s.v === 2 && Array.isArray(s.objects) && s.stats) return migrate(s); } catch (e) {}
+  return null;
+}
+function downloadSave() {
+  save();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([serialize()], { type: 'application/json' }));
+  a.download = `wildgrove-zoo-level${S.level}-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function loadState(s) {
+  S = s; visitors = []; floaters = []; selected = null; tool = null;
+  const ids = [...S.objects.flatMap(o => (o.animals || []).map(a => a.id)), ...S.storage.animals.map(a => a.id)];
+  uid = Math.max(1, ...ids.filter(n => typeof n === 'number')) + 1000;
+  rebuild(); setTool(null); select(null); closeSheets(); $('#tutorial').dataset.step = '';
+  if (S.cam) { cam.x = S.cam.x; cam.y = S.cam.y; cam.z = S.cam.z; clampCam(); } else centerCam();
+  computeMeter(); updateHUD(); tutorialCheck(); save();
 }
 
 // ---------- grid ----------
@@ -128,8 +165,9 @@ function usefulFoods() {
 function unlockedFoods() { const f = new Set(Object.values(SPECIES).filter(s => s.lvl <= S.level).map(s => s.food)); return [...f]; }
 const fmt = n => Math.floor(n).toLocaleString('en-US');
 const compact = n => n >= 10000 ? (n / 1000).toFixed(0) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.floor(n));
-function careReward(at) {
+function careReward(at, species) {
   S.stats.care++; addXp(2);
+  if (species) S.stats.careBy[species] = (S.stats.careBy[species] || 0) + 1;
   if (rnd() < 0.18) { S.paws++; if (at) floaters.push({ wx: at.x, wy: at.y - 10, text: '+1 paw', t: 0, color: '#c6a0ee' }); }
   if (rnd() < 0.03) dropCard(false);
 }
@@ -159,7 +197,7 @@ function toRec(a) { return { id: a.id, species: a.species, variant: a.variant, s
 const needActive = (a, n) => S.clock >= a.due[n];
 const activeNeeds = a => NEEDS.filter(n => needActive(a, n));
 function mood(e, a) {
-  let m = 1 - 0.2 * activeNeeds(a).length - (a.sick ? 0.4 : 0) - 0.15 * (e.dung.length / 6);
+  let m = 1 - 0.2 * activeNeeds(a).length - (a.sick ? 0.4 : 0) - 0.15 * (e.dung.length / 6) + G.TOY_MOOD * (e.toys ? e.toys.length : 0);
   if (SPECIES[a.species].biome === e.biome) m += 0.1;
   return Math.max(0, Math.min(1, m));
 }
@@ -168,13 +206,14 @@ const fitsBiome = (e, species) => SPECIES[species].biome === e.biome;
 function canHold(e, species, variant) { return !e.build && fitsBiome(e, species) && e.animals.length < capOf(e) && (!e.species || (e.species === species && e.variant === variant)); }
 function fulfill(e, a, n, quiet) {
   if (n === 'food') { const f = SPECIES[a.species].food; if (S.food[f] < 1) { if (!quiet) outOfFood(f); return false; } S.food[f]--; }
-  a.due[n] = S.clock + needInterval(a.species, n) * (0.85 + rnd() * 0.3);
+  const toyBoost = n === 'play' && e.toys ? 1 + G.TOY_PLAY * e.toys.length : 1;
+  a.due[n] = S.clock + needInterval(a.species, n) * toyBoost * (0.85 + rnd() * 0.3);
   return true;
 }
 function outOfFood(f) { toast(`Out of ${FOODS[f].name.toLowerCase()}. Buy more in Build → Supplies.`, 'warn'); sfx('no'); }
 function careAll(e, n) {
   let done = 0, missing = false;
-  for (const a of e.animals) if (needActive(a, n)) { if (fulfill(e, a, n, true)) { done++; careReward(iso(e.gx + a.lx, e.gy + a.ly)); } else missing = true; }
+  for (const a of e.animals) if (needActive(a, n)) { if (fulfill(e, a, n, true)) { done++; careReward(iso(e.gx + a.lx, e.gy + a.ly), a.species); } else missing = true; }
   if (missing) outOfFood(SPECIES[e.species].food);
   if (done) { sfx(n); dirty(); }
   return done;
@@ -182,15 +221,15 @@ function careAll(e, n) {
 function careOne(e, a) {
   if (a.sick) return heal(e, a);
   const n = activeNeeds(a)[0];
-  if (!n) { sfx('pet'); a.heart = 1.2; return; }
-  if (fulfill(e, a, n)) { careReward(iso(e.gx + a.lx, e.gy + a.ly)); sfx(n); dirty(); }
+  if (!n) { voice(a.species, a.baby); a.heart = 1.2; const p = iso(e.gx + a.lx, e.gy + a.ly); floaters.push({ wx: p.x, wy: p.y - topOf(a) - 14, text: a.name, t: 0, color: '#ffffff' }); return; }
+  if (fulfill(e, a, n)) { careReward(iso(e.gx + a.lx, e.gy + a.ly), a.species); sfx(n); voice(a.species, a.baby); dirty(); }
 }
 function heal(e, a) {
   if (S.medicine < 1) { toast('No medicine left. Buy some in Build → Supplies.', 'warn'); sfx('no'); return false; }
-  S.medicine--; a.sick = false; careReward(iso(e.gx + a.lx, e.gy + a.ly)); addXp(3); sfx('clean'); dirty(); return true;
+  S.medicine--; a.sick = false; careReward(iso(e.gx + a.lx, e.gy + a.ly), a.species); addXp(3); sfx('clean'); dirty(); return true;
 }
 function healAll(e) { for (const a of e.animals) if (a.sick && !heal(e, a)) break; }
-function cleanEnc(e) { const n = e.dung.length; if (!n) return; e.dung = []; for (let i = 0; i < n; i++) careReward(); sfx('clean'); dirty(); }
+function cleanEnc(e) { const n = e.dung.length; if (!n) return; e.dung = []; S.stats.dung += n; for (let i = 0; i < n; i++) careReward(); sfx('clean'); dirty(); }
 
 function tickEnc(e, dt, offline, rep) {
   if (e.build) return;
@@ -204,7 +243,11 @@ function tickEnc(e, dt, offline, rep) {
   e.sickT = (e.sickT || 0) + dt;
   if (e.sickT >= 10) {
     e.sickT = 0;
-    if (!offline) for (const a of e.animals) if (!a.sick && NEEDS.some(n => S.clock - a.due[n] > needInterval(a.species, n)) && rnd() < 0.03) { a.sick = true; toast(`${a.name} the ${SPECIES[a.species].name.toLowerCase()} is sick. Give medicine.`, 'warn'); }
+    if (!offline) for (const a of e.animals) if (!a.sick && NEEDS.some(n => S.clock - a.due[n] > needInterval(a.species, n)) && rnd() < 0.03) {
+      a.sick = true;
+      toast(S.stats.sickSeen ? `${a.name} the ${SPECIES[a.species].name.toLowerCase()} is sick. Tap the medicine bubble.` : `${a.name} got sick from being neglected! Sick animals are unhappy and stop breeding. Tap the medicine bubble to treat them, or hire the vet.`, 'warn');
+      S.stats.sickSeen = 1;
+    }
   }
   if (!sp) return;
   // breeding
@@ -223,13 +266,31 @@ function tickEnc(e, dt, offline, rep) {
 }
 function stepAnimal(e, a, dt) {
   const sp = SPECIES[a.species];
-  if (a.tx == null) { a.wait -= dt; a.moving = false; if (a.wait <= 0) { a.tx = 0.5 + rnd() * (e.w - 1); a.ty = 0.5 + rnd() * (e.h - 1); } return; }
+  if (a.tx == null) {
+    a.wait -= dt; a.moving = false;
+    if (a.wait <= 0) {
+      if (DK > 0.7 && !a.baby && rnd() < 0.8) { a.sleep = true; a.wait = 5 + rnd() * 8; return; }
+      a.sleep = false; a.tx = 0.5 + rnd() * (e.w - 1); a.ty = 0.5 + rnd() * (e.h - 1);
+    }
+    return;
+  }
   const dx = a.tx - a.lx, dy = a.ty - a.ly, d = Math.hypot(dx, dy);
   const spd = sp.speed * (a.baby ? 1.2 : 1) * (a.sick ? 0.4 : 1);
   if (d < 0.05) { a.tx = null; a.wait = 1.5 + rnd() * 5; a.moving = false; return; }
   const s = Math.min(d, spd * dt); a.lx += dx / d * s; a.ly += dy / d * s; a.moving = true;
   const sdx = dx - dy; if (Math.abs(sdx) > 0.02) a.flip = sdx < 0;
 }
+
+// ---------- day / night ----------
+// 0 = full day, 1 = deepest night. The tutorial always plays in daylight.
+let DK = 0;
+function dayPhase() { return (S.clock % G.DAY_LENGTH) / G.DAY_LENGTH; }
+function darkness() {
+  if (!S.settings.night || S.tut >= 0) return 0;
+  const p = dayPhase(), ease = k => k * k * (3 - 2 * k);
+  if (p < 0.6) return 0; if (p < 0.68) return ease((p - 0.6) / 0.08); if (p < 0.92) return 1; return ease(1 - (p - 0.92) / 0.08);
+}
+function timeToChange() { const p = dayPhase(); const nextAt = p < 0.6 ? 0.6 : p < 0.92 ? 0.92 : 1.6; return (nextAt - p) * G.DAY_LENGTH; }
 
 // ---------- zoo meter / attraction ----------
 let M = { meter: 50, attraction: 0, target: 0, parts: {} }, meterT = 0;
@@ -277,7 +338,7 @@ function collectShop(o) {
 }
 function finishBuildCost(o) { return Math.max(1, Math.ceil((o.build - S.clock) / 120)); }
 function rushBuild(o) { const c = finishBuildCost(o); if (S.gems < c) { toast(`You need ${c} gem${c > 1 ? 's' : ''}`, 'warn'); return; } S.gems -= c; o.build = S.clock; sfx('gem'); }
-function tickBuild(o) { if (o.build && S.clock >= o.build) { o.build = null; if (o.kind === 'enc' || o.kind === 'shop' || o.kind === 'bld') { toast(`${objName(o)} is ready!`); sfx('build'); addXp(10); groundDirty = true; } } }
+function tickBuild(o) { if (o.build && S.clock >= o.build) { o.build = null; delete o.paid; if (o.kind === 'enc' || o.kind === 'shop' || o.kind === 'bld') { toast(`${objName(o)} is ready!`); sfx('build'); addXp(10); groundDirty = true; } } }
 function tickBld(o, dt) {
   if (o.build) return;
   if (o.type === 'nursery') for (const s of o.slots) { if (s.rec.baby) { s.rec.grow += dt * 3 / SPECIES[s.rec.species].grow; if (s.rec.grow >= 1) { s.rec.grow = 1; s.rec.baby = false; } } }
@@ -295,12 +356,13 @@ let helperT = 0;
 function tickHelpers(dt) {
   helperT += dt; if (helperT < 2) return; helperT = 0;
   const H = S.helpers, on = k => H[k] > S.clock;
-  if (!on('food') && !on('water') && !on('pet') && !on('clean')) return;
+  if (!Object.keys(HELPERS).some(on)) return;
   for (const e of S.objects) if (e.kind === 'enc' && !e.build) {
     for (const a of e.animals) {
       if (on('food') && needActive(a, 'food')) fulfill(e, a, 'food', true);
       if (on('water') && needActive(a, 'water')) fulfill(e, a, 'water', true);
       if (on('pet')) { if (needActive(a, 'pet')) fulfill(e, a, 'pet', true); if (needActive(a, 'play')) fulfill(e, a, 'play', true); }
+      if (on('vet') && a.sick && S.medicine > 0) { S.medicine--; a.sick = false; }
     }
     if (on('clean')) e.dung = [];
   }
@@ -311,26 +373,104 @@ function tickHelpers(dt) {
 let visitors = [], spawnT = 0, floaters = [], litterT = 0;
 function spawnVisitor() {
   if (!nb4(GATE.x, GATE.y).some(([x, y]) => isPath(x, y))) return;
-  visitors.push({ gx: GATE.x + 0.5, gy: GATE.y + 0.5, cx: GATE.x, cy: GATE.y, px: -1, py: -1, tx: GATE.x, ty: GATE.y,
-    life: 40 + rnd() * 50, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0 });
-  const tp = ticketPrice(); addCoins(tp, true);
+  const v = { gx: GATE.x + 0.5, gy: GATE.y + 0.5, cx: GATE.x, cy: GATE.y, px: -1, py: -1, tx: GATE.x, ty: GATE.y, route: null, dest: null,
+    life: 50 + rnd() * 60, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0, wish: null };
+  if (S.tut < 0 && rnd() < 0.3) v.wish = makeWish();
+  visitors.push(v);
+  const tp = ticketPrice(); addCoins(tp, true); S.stats.visitorsIn++;
   const p = iso(GATE.x + 0.5, GATE.y + 0.5); floaters.push({ wx: p.x, wy: p.y - 70, text: '+' + tp, t: 0, color: '#f2b632' });
+}
+// wishes: a visitor would love to see an animal, buy a snack, or sit down. Granting one pays a tip.
+function makeWish() {
+  const r = rnd();
+  const kept = [...new Set(S.objects.filter(o => o.kind === 'enc').flatMap(o => o.animals.map(a => a.species)))];
+  if (r < 0.62) {
+    const pool = kept.length && rnd() < 0.7 ? kept : Object.keys(SPECIES).filter(k => SPECIES[k].lvl <= S.level + 2);
+    return { kind: 'animal', key: pick(pool), t: 0 };
+  }
+  if (r < 0.88) return { kind: 'shop', key: pick(Object.keys(SHOPS).filter(k => SHOPS[k].lvl <= Math.max(2, S.level))), t: 0 };
+  return { kind: 'rest', key: 'bench', t: 0 };
+}
+const wishName = w => w.kind === 'animal' ? SPECIES[w.key].name.toLowerCase() : w.kind === 'shop' ? SHOPS[w.key].name.toLowerCase() : 'a bench to rest on';
+function wishMatches(w, o) {
+  if (!w || o.build) return false;
+  if (w.kind === 'animal') return o.kind === 'enc' && o.animals.some(a => a.species === w.key);
+  if (w.kind === 'shop') return o.kind === 'shop' && o.type === w.key;
+  return o.kind === 'deco' && DECOR[o.type] && DECOR[o.type].rest;
+}
+function grantWish(v) {
+  const tip = 4 + S.level * 2;
+  addCoins(tip, true); addXp(3); S.stats.wishes++; v.wish = null; v.heart = 2;
+  const p = iso(v.gx, v.gy); floaters.push({ wx: p.x, wy: p.y - 46, text: `Wish granted! +${tip}`, t: 0, color: '#ffd76a' });
+  if (rnd() < 0.08) dropCard(false);
+  sfx('coin');
+}
+// path cells next to an object's edges (where a visitor can stand to look at it)
+function frontCells(o) {
+  const out = [];
+  for (let x = o.gx; x < o.gx + o.w; x++) { out.push([x, o.gy - 1], [x, o.gy + o.h]); }
+  for (let y = o.gy; y < o.gy + o.h; y++) { out.push([o.gx - 1, y], [o.gx + o.w, y]); }
+  return out.filter(([x, y]) => reach.has(x + ',' + y));
+}
+// breadth-first route over walkable tiles to the nearest goal cell; returns a list of [x, y] steps
+function route(fx, fy, goals) {
+  const goal = new Set(goals.map(([x, y]) => x + ',' + y)); if (!goal.size) return null;
+  const start = fx + ',' + fy; if (goal.has(start)) return [];
+  const prev = new Map([[start, null]]); const q = [[fx, fy]];
+  for (let i = 0; i < q.length && i < 4000; i++) {
+    const [x, y] = q[i];
+    for (const [a, b] of nb4(x, y)) {
+      const k = a + ',' + b; if (prev.has(k) || !walkable(a, b)) continue;
+      prev.set(k, x + ',' + y);
+      if (goal.has(k)) { const out = []; for (let c = k; c && c !== start; c = prev.get(c)) out.push(c.split(',').map(Number)); return out.reverse(); }
+      q.push([a, b]);
+    }
+  }
+  return null;
+}
+function chooseDest(v) {
+  if (v.age > v.life) return { gate: true, cells: [[GATE.x, GATE.y]] };
+  let cands = S.objects.filter(o => o._conn && !o.build && (o.kind === 'enc' ? o.animals.length : o.kind === 'shop' || (o.kind === 'deco' && DECOR[o.type] && DECOR[o.type].appeal >= 1.5)));
+  if (v.wish) { const m = cands.filter(o => wishMatches(v.wish, o)); if (m.length) cands = m; else if (rnd() < 0.5) return null; }
+  if (!cands.length || rnd() < 0.15) return null;
+  // nearer and more appealing things are picked more often
+  const wt = o => (o.kind === 'enc' ? 3 + o.animals.length : o.kind === 'shop' ? 2 : 1) / (4 + Math.abs(o.gx - v.cx) + Math.abs(o.gy - v.cy));
+  let r = rnd() * cands.reduce((a, o) => a + wt(o), 0), o = cands[0];
+  for (const c of cands) { r -= wt(c); if (r <= 0) { o = c; break; } }
+  return { obj: o, cells: frontCells(o) };
 }
 function stepVisitor(v, dt) {
   v.age += dt;
+  if (v.wish) { v.wish.t += dt; if (v.wish.t > 45) { const k = v.wish.kind + ':' + v.wish.key; S.wishLog[k] = (S.wishLog[k] || 0) + 1; v.wish = null; v.sad = 2; } }
   if (v.pause > 0) { v.pause -= dt; v.moving = false; return; }
   const tx = v.tx + 0.5, ty = v.ty + 0.5, dx = tx - v.gx, dy = ty - v.gy, d = Math.hypot(dx, dy);
   if (d < 0.03) {
     v.px = v.cx; v.py = v.cy; v.cx = v.tx; v.cy = v.ty;
+    if (v.leaving && v.cx === GATE.x && v.cy === GATE.y) { v.gone = true; return; }
+    if (v.route && v.route.length) { const [nx, ny] = v.route.shift(); if (walkable(nx, ny)) { v.tx = nx; v.ty = ny; return; } v.route = null; }
+    if (v.route && !v.route.length && v.dest) { arrive(v, v.dest); v.route = null; v.dest = null; return; }
+    // plan the next outing
+    if (!v.dest && (rnd() < 0.5 || v.age > v.life)) {
+      const d2 = chooseDest(v);
+      if (d2) { const r = route(v.cx, v.cy, d2.cells); if (r) { v.route = r; v.dest = d2; if (d2.gate) v.leaving = true; if (!r.length) { arrive(v, d2); v.route = null; v.dest = null; v.pause = Math.max(v.pause, 0.5); return; } const [nx, ny] = v.route.shift(); v.tx = nx; v.ty = ny; return; } }
+    }
     let opts = nb4(v.cx, v.cy).filter(([x, y]) => walkable(x, y));
     const fwd = opts.filter(([x, y]) => !(x === v.px && y === v.py)); if (fwd.length) opts = fwd;
     if (!opts.length) { v.pause = 1; return; }
     const [nx, ny] = pick(opts); v.tx = nx; v.ty = ny;
-    if (rnd() < 0.3) for (const e of S.objects) if (e.kind === 'enc' && e.animals.length && v.cx >= e.gx - 1 && v.cx <= e.gx + e.w && v.cy >= e.gy - 1 && v.cy <= e.gy + e.h) { v.pause = 1.5 + rnd() * 2; if (encMood(e) > 0.7) v.heart = 1.6; break; }
   } else {
     const s = Math.min(d, v.speed * dt); v.gx += dx / d * s; v.gy += dy / d * s;
     const sdx = dx - dy; if (Math.abs(sdx) > 0.01) v.flip = sdx < 0; v.moving = true;
   }
+}
+function arrive(v, d) {
+  if (d.gate) { v.gone = true; return; }
+  const o = d.obj; if (!o || !S.objects.includes(o)) return;
+  if (o.kind === 'enc') { v.pause = 2 + rnd() * 3; if (encMood(o) > 0.7) v.heart = 1.6; }
+  else v.pause = 1 + rnd() * 2;
+  // face the thing they came to see
+  const cx = o.gx + o.w / 2 - v.gx, cy = o.gy + o.h / 2 - v.gy; if (Math.abs(cx - cy) > 0.05) v.flip = cx - cy < 0;
+  if (wishMatches(v.wish, o)) grantWish(v);
 }
 function binNear(x, y) { for (const o of S.objects) if (o.type === 'trashbin' && Math.abs(o.gx - x) <= 3 && Math.abs(o.gy - y) <= 3) return true; return false; }
 function tickLitter(dt) {
@@ -380,7 +520,13 @@ function clampCam() {
 function centerCam() { const c = iso(N - EXPANSIONS[S.owned].ox / 2, N - EXPANSIONS[S.owned].oy / 2); cam.x = c.x; cam.y = c.y; cam.z = Math.max(0.72, Math.min(1.15, Math.min(W / 950, H / 640))); clampCam(); }
 
 // ---------- tools ----------
-let tool = null, hover = null, selected = null;
+let tool = null, hover = null, selected = null, lastPlaced = null;
+// undo the last decor placement (Ctrl+Z or the Undo button) within 30 s, for a full refund
+function undoPlace() {
+  const l = lastPlaced; lastPlaced = null;
+  if (!l || performance.now() - l.at > 30000 || !S.objects.includes(l.o)) { toast('Nothing to undo'); return; }
+  S.objects = S.objects.filter(x => x !== l.o); addCoins(l.cost); rebuild(); sfx('path'); toast(`${objName(l.o)} removed, ${l.cost} coins back`); dirty();
+}
 function footprint(t) {
   if (t.kind === 'move' || t.kind === 'place') return { w: t.w, h: t.h };
   if (t.kind === 'enc') return { w: 3, h: 3 };
@@ -407,7 +553,7 @@ function place(gx, gy) {
   if (tool.kind === 'place') { // from storage
     const it = tool.item; S.storage.items = S.storage.items.filter(x => x !== it);
     const o = Object.assign({}, it.obj || {}, { id: 'o' + uid++, kind: it.kind, type: it.type, gx, gy, w: tool.w, h: tool.h });
-    if (it.kind === 'enc') Object.assign(o, { biome: it.biome, animals: [], dung: [], species: null, variant: 0, level: it.level || 0, breed: 0, build: null });
+    if (it.kind === 'enc') Object.assign(o, { biome: it.biome, animals: [], dung: [], species: null, variant: 0, level: it.level || 0, toys: it.toys || [], breed: 0, build: null });
     if (it.kind === 'shop') Object.assign(o, { prog: 0, build: null });
     if (it.kind === 'bld') Object.assign(o, { build: null, slots: o.slots || [], job: o.job || null });
     S.objects.push(o); rebuild(); setTool(null); select(o); sfx('build'); dirty(); return;
@@ -416,10 +562,11 @@ function place(gx, gy) {
   if (S.coins < cost) { toast('Not enough coins', 'warn'); sfx('no'); return; }
   S.coins -= cost;
   let o;
-  if (tool.kind === 'enc') o = { id: 'e' + uid++, kind: 'enc', biome: tool.biome, gx, gy, w: 3, h: 3, level: 0, species: null, variant: 0, animals: [], dung: [], breed: 0, build: S.clock + (S.tut >= 0 && S.tut <= 2 ? 8 : 40) };
+  if (tool.kind === 'enc') o = { id: 'e' + uid++, kind: 'enc', biome: tool.biome, gx, gy, w: 3, h: 3, level: 0, species: null, variant: 0, animals: [], dung: [], toys: [], breed: 0, build: S.clock + (S.tut >= 0 && S.tut <= 2 ? 8 : 40) };
   else if (tool.kind === 'shop') o = { id: 's' + uid++, kind: 'shop', type: tool.type, gx, gy, w: 1, h: 1, prog: 0, build: S.clock + (S.tut >= 0 && tool.type === 'feeder' ? 5 : SHOPS[tool.type].build) };
   else if (tool.kind === 'bld') o = { id: 'b' + uid++, kind: 'bld', type: tool.type, gx, gy, w: 2, h: 2, build: S.clock + BUILDINGS[tool.type].build, slots: [], job: null };
   else o = { id: 'd' + uid++, kind: 'deco', type: tool.type, gx, gy, w: 1, h: 1 };
+  if (o.build) o.paid = cost; else lastPlaced = { o, cost, at: performance.now() };
   S.objects.push(o); addXp(o.kind === 'deco' ? 1 : 8); rebuild(); sfx('build');
   if (o.kind !== 'deco') { setTool(null); select(o); }
   dirty();
@@ -444,7 +591,7 @@ function storeObj(o) {
   if (o.kind === 'enc' && o.animals.length) { toast('Move the animals out first', 'warn'); return; }
   if (o.build) { toast('Wait until it is finished', 'warn'); return; }
   const it = { kind: o.kind, type: o.type, w: o.w, h: o.h };
-  if (o.kind === 'enc') Object.assign(it, { biome: o.biome, level: o.level, type: 'enc' });
+  if (o.kind === 'enc') Object.assign(it, { biome: o.biome, level: o.level, toys: o.toys || [], type: 'enc' });
   if (o.kind === 'bld') it.obj = { slots: o.slots, job: o.job };
   S.storage.items.push(it); S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); toast(`${objName(o)} put in storage`); dirty();
 }
@@ -466,7 +613,7 @@ function frame(now) {
   } catch (e) { if (!frameErr) { frameErr = true; console.error(e); } }
 }
 function tick(dt) {
-  S.clock += dt;
+  S.clock += dt; DK = darkness();
   meterT -= dt; if (meterT <= 0) { meterT = 0.5; computeMeter(); }
   for (const o of S.objects) {
     tickBuild(o);
@@ -477,9 +624,10 @@ function tick(dt) {
   tickHelpers(dt);
   for (const p of S.escaped) stepEscaped(p, dt);
   spawnT -= dt;
-  if (visitors.length < M.target && spawnT <= 0) { spawnVisitor(); const base = Math.min(1.7, 60 / Math.max(1, M.target)); spawnT = base * (0.7 + rnd() * 0.6) * (visitors.length < M.target * 0.7 ? 0.5 : 1); }
+  const vt = Math.round(M.target * (1 - 0.45 * DK));
+  if (visitors.length < vt && spawnT <= 0) { spawnVisitor(); const base = Math.min(1.7, 60 / Math.max(1, vt)); spawnT = base * (0.7 + rnd() * 0.6) * (visitors.length < vt * 0.7 ? 0.5 : 1); }
   for (const v of visitors) stepVisitor(v, dt);
-  visitors = visitors.filter(v => v.age < v.life + 1);
+  visitors = visitors.filter(v => !v.gone && v.age < v.life + 60);
   if (visitors.length > S.stats.peakVisitors) S.stats.peakVisitors = visitors.length;
   tickLitter(dt);
   floaters.forEach(f => f.t += dt); floaters = floaters.filter(f => f.t < 1.4);
@@ -658,10 +806,33 @@ function render() {
     ctx.fillStyle = tool.kind === 'path' ? (owned(hover.x, hover.y) ? 'rgba(255,255,255,0.35)' : 'rgba(230,90,80,0.35)') : 'rgba(217,83,79,0.4)';
     diamond(ctx, p.x, p.y, TW / 2, TH / 2); ctx.fill();
   }
+  if (DK > 0.01) drawNight(DK, on);
   drawBubbles();
   for (const f of floaters) {
     ctx.save(); ctx.globalAlpha = Math.max(0, 1 - f.t / 1.4); ctx.font = '800 15px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(46,58,42,0.8)'; ctx.strokeText(f.text, f.wx, f.wy - f.t * 28); ctx.fillStyle = f.color; ctx.fillText(f.text, f.wx, f.wy - f.t * 28); ctx.restore();
+  }
+  ctx.restore();
+}
+function drawNight(dk, on) {
+  const a = toWorld(0, 0), b = toWorld(W, H);
+  ctx.save();
+  ctx.fillStyle = `rgba(16, 24, 66, ${0.46 * dk})`; ctx.fillRect(a.x - 10, a.y - 10, b.x - a.x + 20, b.y - a.y + 20);
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = (x, y, r, k) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(255, 196, 100, ${0.42 * k * dk})`); g.addColorStop(0.45, `rgba(255, 160, 70, ${0.16 * k * dk})`); g.addColorStop(1, 'rgba(255, 140, 60, 0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+  for (const o of S.objects) {
+    if (o.build) continue;
+    const c = iso(o.gx + o.w / 2, o.gy + o.h / 2); if (!on(c.x, c.y, 80)) continue;
+    if (o.kind === 'deco' && DECOR[o.type] && DECOR[o.type].light) { glow(c.x, c.y - 44, 46, 1); glow(c.x, c.y, 80, 0.55); }
+    else if (o.kind === 'gate') { glow(c.x - 14, c.y - 50, 40, 0.8); glow(c.x + 14, c.y - 50, 40, 0.8); }
+    else if (o.kind === 'shop' || o.kind === 'bld') glow(c.x, c.y - 24 * o.w, 40 * o.w, 0.6);
+  }
+  // fireflies drifting over the zoo
+  ctx.fillStyle = `rgba(230, 255, 140, ${0.8 * dk})`;
+  for (let i = 0; i < 26; i++) {
+    const fx = iso(OR.x0 + tileHash(i, 3) * (N - OR.x0), OR.y0 + tileHash(5, i) * (N - OR.y0));
+    const x = fx.x + Math.sin(T * 0.6 + i) * 22, y = fx.y - 18 + Math.cos(T * 0.8 + i * 1.7) * 10, k = 0.5 + 0.5 * Math.sin(T * 3 + i * 2.3);
+    if (k > 0.25) { ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
   }
   ctx.restore();
 }
@@ -697,6 +868,7 @@ function pushEnc(items, e) {
   for (let x = e.gx; x < e.gx + e.w; x++) { segs.push([x, e.gy, x + 1, e.gy]); segs.push([x, e.gy + e.h, x + 1, e.gy + e.h]); }
   for (let y = e.gy; y < e.gy + e.h; y++) { segs.push([e.gx, y, e.gx, y + 1]); segs.push([e.gx + e.w, y, e.gx + e.w, y + 1]); }
   for (const s of segs) items.push({ d: (s[0] + s[2]) / 2 + (s[1] + s[3]) / 2 + 0.01, f: () => drawFence(s, b, e) });
+  (e.toys || []).forEach((t, i) => { const lx = i ? e.w * 0.74 : e.w * 0.3, ly = i ? e.h * 0.3 : e.h * 0.66; items.push({ d: e.gx + lx + e.gy + ly, f: () => { const p = iso(e.gx + lx, e.gy + ly); drawToy(t, p.x, p.y); } }); });
   for (const pr of encProps(e)) items.push({ d: e.gx + pr.lx + e.gy + pr.ly, f: () => { const p = iso(e.gx + pr.lx, e.gy + pr.ly); drawProp(pr.t, p.x, p.y); } });
   if (!isMoving(e)) for (const a of e.animals) items.push({ d: e.gx + a.lx + e.gy + a.ly, f: () => drawAnimal(e, a) });
   items.push({ d: e.gx + e.gy + e.w + e.h + 0.5, f: () => {
@@ -714,9 +886,15 @@ function pushEnc(items, e) {
 function encProps(e) {
   if (e._props) return e._props;
   const r = seeded(e.gx * 31 + e.gy * 17 + 3);
-  const kinds = { meadow: ['flowers', 'bush'], ice: ['ice', 'ice'], lagoon: ['reed', 'reed'], desert: ['cactus', 'rockS'], bamboo: ['bamboo', 'bamboo'], savanna: ['acacia', 'grassT'] }[e.biome];
+  const kinds = { meadow: ['flowers', 'bush'], ice: ['ice', 'ice'], lagoon: ['reed', 'reed'], desert: ['cactus', 'rockS'], bamboo: ['bamboo', 'bamboo'], savanna: ['acacia', 'grassT'], coast: ['driftwood', 'rockS'] }[e.biome] || ['bush', 'bush'];
   e._props = [{ t: kinds[0], lx: 0.35 + r() * 0.3, ly: 0.35 + r() * 0.3 }, { t: kinds[1], lx: e.w - 0.4 - r() * 0.3, ly: e.h - 1.2 - r() * 0.2 }, { t: kinds[1], lx: 0.4 + r() * 0.3, ly: e.h * 0.45 + r() * 0.3 }];
   return e._props;
+}
+function drawToy(t, x, y) {
+  ctx.save(); ctx.translate(x, y);
+  if (ART.decor[t]) { try { ART.decor[t](ctx, T); } catch (er) {} }
+  else { ctx.fillStyle = '#e4572e'; ctx.strokeStyle = '#9b3a1e'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, -6, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  ctx.restore();
 }
 function drawProp(t, x, y) {
   ctx.save(); ctx.translate(x, y);
@@ -728,6 +906,7 @@ function drawProp(t, x, y) {
   else if (t === 'rockS') { if (ART.decor.rock) { ctx.scale(0.7, 0.7); ART.decor.rock(ctx, T); } }
   else if (t === 'bamboo') { for (let i = -1; i <= 1; i++) { const hh = 34 + i * 6; ctx.fillStyle = '#9cc75a'; ctx.strokeStyle = '#6f9a3c'; ctx.lineWidth = 1; ctx.fillRect(i * 6 - 2, -hh, 4, hh); ctx.strokeRect(i * 6 - 2, -hh, 4, hh); for (let k = 8; k < hh; k += 9) { ctx.beginPath(); ctx.moveTo(i * 6 - 2.5, -k); ctx.lineTo(i * 6 + 2.5, -k); ctx.stroke(); } ctx.fillStyle = '#7fb84a'; ctx.beginPath(); ctx.ellipse(i * 6 + 5, -hh + 3, 6, 2, -0.5 + Math.sin(T + i) * 0.1, 0, Math.PI * 2); ctx.fill(); } }
   else if (t === 'acacia') { ctx.strokeStyle = '#7a5434'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -22); ctx.lineTo(-7, -32); ctx.moveTo(0, -22); ctx.lineTo(8, -31); ctx.stroke(); ctx.fillStyle = '#7ea64a'; ctx.beginPath(); ctx.ellipse(0, -34, 22, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#93ba5a'; ctx.beginPath(); ctx.ellipse(-3, -36, 15, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+  else if (t === 'driftwood') { ctx.fillStyle = '#b39572'; ctx.strokeStyle = '#7d6446'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(0, -3, 15, 3.6, -0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(6, -5); ctx.lineTo(11, -11); ctx.stroke(); ctx.fillStyle = '#f3e6cf'; ctx.beginPath(); ctx.ellipse(-12, 2, 3, 2, 0.4, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#f2b8a6'; ctx.beginPath(); ctx.ellipse(10, 3, 2.4, 1.6, -0.3, 0, Math.PI * 2); ctx.fill(); }
   else if (t === 'grassT') { ctx.strokeStyle = '#b59a4a'; ctx.lineWidth = 1.5; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 2, 0); ctx.lineTo(i * 3 + Math.sin(T + i) * 1.5, -9 - (3 - Math.abs(i))); ctx.stroke(); } }
   ctx.restore();
 }
@@ -741,22 +920,26 @@ function drawFence(s, b, e) {
   for (const p of [a, c]) { ctx.fillStyle = b.fence; ctx.fillRect(p.x - 2, p.y - 17, 4, 17); ctx.fillStyle = sel ? '#fff' : b.rail; ctx.beginPath(); ctx.ellipse(p.x, p.y - 17, 2.4, 1.4, 0, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
+const topOf = a => (G.SPECIES_TOP[a.species] || 42) * (a.baby ? 0.65 : 1);
 function drawAnimal(e, a) {
   const p = iso(e.gx + a.lx, e.gy + a.ly), fn = ART.animals[a.species];
   ctx.save(); ctx.translate(p.x, p.y);
   if (fn) { try { fn(ctx, T + a.phase, { baby: a.baby, flip: a.flip, moving: a.moving, sex: a.sex, variant: a.variant }); } catch (er) {} }
-  const top = -((SPECIES[a.species] && a.species === 'giraffe') ? 66 : a.species === 'crocodile' ? 22 : 42) * (a.baby ? 0.65 : 1);
+  const top = -topOf(a);
   if (a.sick) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon('sick', 0, top - 6 + bob, 15); }
-  else { const n = activeNeeds(a); if (n.length) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon(n[0] === 'food' ? SPECIES[a.species].food : n[0], 0, top - 6 + bob, 13); } }
+  else { const n = activeNeeds(a); if (n.length) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon(n[0] === 'food' ? SPECIES[a.species].food : n[0], 0, top - 6 + bob, 13); }
+    else if (a.sleep && !a.moving) { ctx.save(); ctx.globalAlpha = 0.85; drawIcon('zzz', 6, top - 4 - (T * 6 + a.phase * 3) % 8, 12); ctx.restore(); } }
   if (a.heart > 0) { a.heart -= 1 / 60; ctx.globalAlpha = Math.min(1, a.heart); drawIcon('heart', 8, top - 10 - (1.2 - a.heart) * 12, 12); }
   ctx.restore();
 }
 function drawVisitor(v, p) {
-  const fade = Math.max(0, Math.min(1, v.life + 1 - v.age, v.age * 2));
+  const fade = Math.max(0, Math.min(1, v.life + 60 - v.age, v.age * 2));
   ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y);
   if (ART.person) { try { ART.person(ctx, T + v.life, { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip }); } catch (e) {} }
-  if (v.heart > 0) { v.heart -= 1 / 60; ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); if (ART.icons.heart) ART.icons.heart(ctx, 12); }
+  if (v.heart > 0) { v.heart -= 1 / 60; ctx.save(); ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); if (ART.icons.heart) ART.icons.heart(ctx, 12); ctx.restore(); }
+  else if (v.sad > 0) { v.sad -= 1 / 60; ctx.globalAlpha = fade * Math.min(1, v.sad); ctx.font = '700 13px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(46,58,42,.7)'; ctx.lineWidth = 3; ctx.strokeText('☹', 0, -36); ctx.fillText('☹', 0, -36); }
   ctx.restore();
+  if (v.wish && cam.z > 0.55) bubbles.push({ wx: p.x, wy: p.y - 46, wish: v, small: true });
 }
 function drawGhost(gx, gy) {
   const ok = canPlace(tool, gx, gy) && S.coins >= toolCost(tool), f = footprint(tool);
@@ -769,8 +952,23 @@ function drawGhost(gx, gy) {
   else drawDecorSprite('construction3', c.x, c.y, 0.5);
   ctx.restore();
 }
+function drawWishBubble(b) {
+  const w = b.wish.wish; if (!w) return;
+  const x = b.wx, y = b.wy + Math.sin(T * 2.5 + b.wx) * 1.5, r = 13;
+  ctx.save();
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#8e5ea2'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x - 6, y + r + 3, 2.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x - 9, y + r + 8, 1.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r - 1.5, 0, Math.PI * 2); ctx.clip();
+  if (w.kind === 'animal' && ART.animals[w.key]) { const k = 16 / ((G.SPECIES_TOP[w.key] || 42) + 4); ctx.translate(x, y + 8); ctx.scale(k * 1.15, k * 1.15); ART.animals[w.key](ctx, 0.5, { sex: 'm' }); }
+  else { const id = w.kind === 'shop' ? w.key : 'bench', fn = ART.decor[id]; if (fn) { ctx.translate(x, y + 9); ctx.scale(0.24, 0.24); fn(ctx, 0); } }
+  ctx.restore();
+  b.hit = { x: x - r - 3, y: y - r - 3, w: 2 * r + 6, h: 2 * r + 12 };
+}
 function drawBubbles() {
   for (const b of bubbles) {
+    if (b.wish) { drawWishBubble(b); continue; }
     const bob = Math.sin(T * 3 + b.wx * 0.05) * 2.5, y = b.wy + bob;
     const wide = b.n != null || b.text, w = wide ? (b.text && b.text.length > 3 ? 70 : 50) : 30, h = 30;
     const ready = b.ready, warn = b.warn;
@@ -811,9 +1009,9 @@ cv.addEventListener('pointerup', endPointer); cv.addEventListener('pointercancel
 cv.addEventListener('pointerleave', () => { if (!drag) hover = null; });
 cv.addEventListener('wheel', e => { e.preventDefault(); const b = toWorld(e.offsetX, e.offsetY); cam.z *= Math.exp(-e.deltaY * 0.0015); clampCam(); const a = toWorld(e.offsetX, e.offsetY); cam.x += b.x - a.x; cam.y += b.y - a.y; clampCam(); }, { passive: false });
 window.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   if (e.code === 'Space') spaceDown = true;
-  if (e.key === 'Escape') { setTool(null); select(null); closeSheets(); }
+  if (e.key === 'Escape') { const m = document.querySelector('.modal:not([hidden])'); if (m) { m.hidden = true; return; } setTool(null); select(null); closeSheets(); }
   const st = 40 / cam.z;
   if (e.key === 'ArrowLeft') cam.x -= st; if (e.key === 'ArrowRight') cam.x += st; if (e.key === 'ArrowUp') cam.y -= st; if (e.key === 'ArrowDown') cam.y += st; clampCam();
 });
@@ -825,6 +1023,7 @@ function tap(sx, sy) {
     const b = bubbleAt(sx, sy);
     if (b) {
       if (b.escaped) return catchEscaped(b.escaped);
+      if (b.wish) { const w = b.wish.wish; if (w) { const has = S.objects.some(o => wishMatches(w, o) && o._conn); toast(w.kind === 'rest' ? 'This visitor is tired and would love a bench or picnic table by the path.' : `This visitor would love to ${w.kind === 'animal' ? 'see a' : 'visit the'} ${wishName(w)}.${has ? ' They\'re on their way!' : ' You don\'t have one by a path yet.'}`); } return; }
       const o = b.obj;
       if (b.act === 'collect') return collectShop(o);
       if (b.act === 'care') { careAll(o, b.need); return; }
@@ -838,7 +1037,7 @@ function tap(sx, sy) {
     let best = null, bd = 18;
     for (const e of S.objects) if (e.kind === 'enc' && !e.build) for (const a of e.animals) { const p = iso(e.gx + a.lx, e.gy + a.ly); const d = Math.hypot(w.x - p.x, w.y - (p.y - 14 * (a.baby ? 0.6 : 1))); if (d < bd) { bd = d; best = [e, a]; } }
     if (best) { careOne(best[0], best[1]); return; }
-    for (const e of S.objects) if (e.kind === 'enc') for (const d of e.dung) { const p = iso(e.gx + d.lx, e.gy + d.ly); if (Math.hypot(w.x - p.x, w.y - p.y + 4) < 11) { e.dung = e.dung.filter(x => x !== d); careReward(); sfx('clean'); dirty(); return; } }
+    for (const e of S.objects) if (e.kind === 'enc') for (const d of e.dung) { const p = iso(e.gx + d.lx, e.gy + d.ly); if (Math.hypot(w.x - p.x, w.y - p.y + 4) < 11) { e.dung = e.dung.filter(x => x !== d); S.stats.dung++; careReward(); sfx('clean'); dirty(); return; } }
     for (const l of S.litter) { const p = iso(l.x + 0.5 + l.ox, l.y + 0.5 + l.oy); if (Math.hypot(w.x - p.x, w.y - p.y) < 13) return pickLitter(l); }
   }
   const g = toGrid(sx, sy);
@@ -863,7 +1062,13 @@ function iconCanvas(id, size, kind, opts) {
   } catch (e) {}
   return c;
 }
-const ic = (id, size) => { const s = el('span', 'ic'); s.appendChild(iconCanvas(id, size || 16, 'icon')); return s.outerHTML; };
+// inline icons for HTML strings: a canvas loses its pixels when serialised, so cache each icon as a data URL
+const icCache = new Map();
+const ic = (id, size) => {
+  size = size || 16; const k = id + '|' + size;
+  let url = icCache.get(k); if (url == null) { url = ART.icons[id] ? iconCanvas(id, size, 'icon').toDataURL() : ''; icCache.set(k, url); }
+  return url ? `<span class="ic"><img src="${url}" width="${size}" height="${size}" alt=""></span>` : '';
+};
 function priceTag(c) { const parts = []; if (c.coins) parts.push(`<span class="pt ${S.coins < c.coins ? 'no' : ''}">${ic('coin', 14)}${fmt(c.coins)}</span>`); if (c.gems) parts.push(`<span class="pt ${S.gems < c.gems ? 'no' : ''}">${ic('gem', 14)}${c.gems}</span>`); if (c.paws) parts.push(`<span class="pt ${S.paws < c.paws ? 'no' : ''}">${ic('paw', 14)}${c.paws}</span>`); return parts.join(''); }
 function canPay(c) { return S.coins >= (c.coins || 0) && S.gems >= (c.gems || 0) && S.paws >= (c.paws || 0); }
 function pay(c) { if (!canPay(c)) { toast('Not enough ' + (S.coins < (c.coins || 0) ? 'coins' : S.gems < (c.gems || 0) ? 'gems' : 'paws'), 'warn'); sfx('no'); return false; } S.coins -= c.coins || 0; S.gems -= c.gems || 0; S.paws -= c.paws || 0; return true; }
@@ -875,10 +1080,17 @@ function updateHUD() {
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
-  const q = S.tut < 0 ? activeQuests().filter(x => x.done).length : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
+  if (S.tut < 0) ensureTasks();
+  const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
   const hubN = S.tut >= 0 ? 0 : (Date.now() >= S.wheelNext ? 1 : 0) + Object.keys(COLLECTIONS).filter(b => collComplete(b) && !S.collectionsDone.includes(b)).length;
   $('#hubBadge').hidden = !hubN; $('#hubBadge').textContent = hubN;
   const storeN = S.storage.animals.length + S.storage.items.length; $('#storeBadge').hidden = !storeN; $('#storeBadge').textContent = storeN;
+  const low = S.tut < 0 ? lowFoods() : [], lf = $('#lowFood');
+  lf.hidden = !low.length;
+  if (low.length) { const key = low.join(); if (lf.dataset.k !== key) { lf.dataset.k = key; lf.innerHTML = `${ic(low[0], 18)}<span>Low ${low.map(f => FOODS[f].name.toLowerCase()).join(', ')}</span>`; } }
+  const night = DK > 0.5, dc = $('#btnDay'); if (dc.dataset.n !== String(night) || !dc.firstChild) { dc.dataset.n = night; dc.innerHTML = ''; dc.appendChild(iconCanvas(night ? 'moon' : 'sun', 20, 'icon')); }
+  dc.hidden = !S.settings.night || S.tut >= 0;
+  dc.title = `${night ? 'Night' : 'Day'} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night, and animals sleep.`;
   if (!$('#quests').hidden) renderQuests();
 }
 
@@ -899,13 +1111,14 @@ function setTool(t) {
     place: () => 'Tap a free spot to place it from storage.',
   }[t.kind]();
   $('#toolHintText').textContent = txt; select(null);
+  $('#toolUndo').hidden = t.kind !== 'deco';
 }
 
 // ---------- selection panel ----------
 let animalMove = null, panelSig = '', confirmRemove = null, adoptOpen = false;
 function select(o) { if (o !== selected) { animalMove = null; confirmRemove = null; adoptOpen = false; } selected = o; if (o) closeSheets(); renderPanel(true); }
 function sigOf(o) {
-  if (o.kind === 'enc') return [o.id, o.build ? 'b' : '', o.level, o.species, o.animals.map(a => a.id + (a.baby ? 'b' : '') + (a.sick ? 's' : '')).join(), animalMove, confirmRemove === o, adoptOpen, S.storage.animals.length, Math.floor(S.coins / 50)].join('|');
+  if (o.kind === 'enc') return [o.id, o.build ? 'b' : '', o.level, o.species, (o.toys || []).join(), S.paws, o.animals.map(a => a.id + (a.baby ? 'b' : '') + (a.sick ? 's' : '')).join(), animalMove, confirmRemove === o, adoptOpen, S.storage.animals.length, Math.floor(S.coins / 50)].join('|');
   if (o.kind === 'bld') return [o.id, o.build ? 'b' : '', JSON.stringify(o.slots.map(s => s.rec.baby)), o.job && o.job.done, !!o.job, S.storage.animals.length, labPick.join()].join('|');
   return [o.kind, o.id, o.build ? 'b' : '', o.prog >= 1].join('|');
 }
@@ -938,7 +1151,9 @@ function renderPanel(force) {
 function btn(cls, html, fn, disabled) { const b = el('button', cls, html); b.onclick = e => { e.stopPropagation(); fn(); renderPanel(true); updateHUD(); }; if (disabled) b.disabled = true; return b; }
 function buildingPanel(P, o) {
   P.appendChild(el('div', 'phead', `<div><div class="eyebrow">Under construction</div><h2>${objName(o)}</h2><div class="sub">Ready in <b data-live="bt">${fmtTime(o.build - S.clock)}</b></div></div>`));
-  const r = el('div', 'row'); r.appendChild(btn('btn gem', `Finish now ${priceTag({ gems: finishBuildCost(o) })}`, () => rushBuild(o))); P.appendChild(r);
+  const r = el('div', 'row wrap'); r.appendChild(btn('btn gem', `Finish now ${priceTag({ gems: finishBuildCost(o) })}`, () => rushBuild(o)));
+  if (o.paid) r.appendChild(btn('mini ghost', `Cancel · refund ${fmt(o.paid)}`, () => { addCoins(o.paid); delete o.paid; S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); sfx('path'); toast('Construction cancelled, coins refunded'); dirty(); }));
+  P.appendChild(r);
 }
 function livePanel(o) {
   const P = $('#panel'); const set = (k, f) => { const e = P.querySelector(`[data-live="${k}"]`); if (e) f(e); };
@@ -1028,6 +1243,15 @@ function encPanel(P, o) {
       g.appendChild(row);
     }
     P.appendChild(g);
+  }
+  // toys
+  if (o.animals.length) {
+    const tw = el('div', 'toys');
+    tw.appendChild(el('div', 'hint', `<b>Toys ${o.toys.length}/${G.TOY_SLOTS}</b> · each adds mood and makes playtime last longer`));
+    const tr = el('div', 'row wrap');
+    for (const t of o.toys) tr.appendChild(el('span', 'toychip', `${ic('toy', 14)} ${TOYS[t] ? TOYS[t].name : t}`));
+    if (o.toys.length < G.TOY_SLOTS) for (const [k, D] of Object.entries(TOYS)) if (!o.toys.includes(k)) tr.appendChild(btn('mini', `${D.name} ${priceTag(D.cost)}`, () => { if (o.toys.length >= G.TOY_SLOTS || !pay(D.cost)) return; o.toys.push(k); addXp(10); sfx('build'); toast(`${D.name} added. The animals love it!`); dirty(); }));
+    tw.appendChild(tr); P.appendChild(tw);
   }
   // footer
   const foot = el('div', 'row foot');
@@ -1167,7 +1391,12 @@ function renderShop() {
     grid.appendChild(card);
   }
 }
+// how much it costs to bring each food your animals eat up to `to` units
+function restockPlan(to) { const kept = new Set(keptSpecies().map(k => SPECIES[k].food)); let cost = 0; const add = {}; for (const f of kept) if (S.food[f] < to) { add[f] = to - S.food[f]; cost += add[f] * FOODS[f].price; } return { add, cost: Math.round(cost * 0.95) }; }
+function lowFoods() { const need = {}; for (const e of S.objects) if (e.kind === 'enc') for (const a of e.animals) { const f = SPECIES[a.species].food; need[f] = (need[f] || 0) + 1; } return Object.keys(need).filter(f => S.food[f] < Math.max(4, need[f] * 2)); }
 function renderSupplies(grid) {
+  const plan = restockPlan(40);
+  if (plan.cost) { const row = el('div', 'supply restock'); row.appendChild(iconCanvas('storage', 34, 'icon')); row.appendChild(el('div', 'sname', `<b>Restock everything</b><small>Brings every food your animals eat up to 40 (5% off)</small>`)); row.appendChild(btn('mini gold', `Restock ${priceTag({ coins: plan.cost })}`, () => { if (pay({ coins: plan.cost })) { for (const [f, n] of Object.entries(plan.add)) S.food[f] += n; sfx('coin'); renderShop(); dirty(); } })); grid.appendChild(row); }
   const foods = Object.keys(FOODS).map(k => ({ k, used: Object.values(SPECIES).some(s => s.food === k && s.lvl <= S.level) }));
   for (const { k, used } of foods) {
     const F = FOODS[k];
@@ -1233,11 +1462,50 @@ const Z = {
   maxVariant: () => Math.max(0, ...S.objects.filter(o => o.kind === 'enc').flatMap(o => o.animals.map(a => a.variant)), ...S.storage.animals.map(a => a.variant)),
 };
 function activeQuests() { const out = []; for (const q of QUESTS) { if (S.claimed.includes(q.id)) continue; let p = 0; try { p = q.prog(S, Z); } catch (e) {} out.push({ q, p: Math.min(p, q.goal), done: p >= q.goal }); if (out.length >= 4) break; } return out; }
+// ---------- daily tasks ----------
+const plural = sp => SPECIES[sp].name.toLowerCase() + 's';
+function taskVal(t) { return t.stat === 'care:' ? (S.stats.careBy[t.sp] || 0) : (S.stats[t.stat] || 0); }
+function keptSpecies() { return [...new Set(S.objects.filter(o => o.kind === 'enc').flatMap(o => o.animals.map(a => a.species)))]; }
+function ensureTasks() {
+  if (S.tut >= 0 || (S.tasks.list.length && Date.now() < S.tasks.next)) return;
+  const kept = keptSpecies(), pairs = S.objects.some(o => o.kind === 'enc' && o.animals.some(a => a.sex === 'm' && !a.baby) && o.animals.some(a => a.sex === 'f' && !a.baby));
+  const pool = DAILY.filter(d => (d.id !== 'careSp' || kept.length) && (d.id !== 'babies' || pairs) && (d.id !== 'shops' || S.objects.some(o => o.kind === 'shop')));
+  const picks = []; while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+  const L = S.level;
+  S.tasks = { next: Date.now() + G.TASK_EVERY, bonus: false, list: picks.map((d, i) => {
+    const sp = d.id === 'careSp' ? pick(kept) : null, n = d.n(L), t = { id: d.id, stat: d.stat, sp, n, claimed: false };
+    t.base = taskVal(t); t.text = d.text(n, sp && plural(sp));
+    t.reward = i === 2 ? { gems: 1, paws: 2 + Math.floor(L / 5), xp: 20 + L * 4 } : { coins: 120 + L * 45, paws: 1 + Math.floor(L / 4), xp: 20 + L * 4 };
+    return t; }) };
+}
+const taskProg = t => Math.min(t.n, taskVal(t) - t.base);
+const tasksReady = () => S.tut < 0 ? S.tasks.list.filter(t => !t.claimed && taskProg(t) >= t.n).length + (allTasksDone() && !S.tasks.bonus ? 1 : 0) : 0;
+const allTasksDone = () => S.tasks.list.length && S.tasks.list.every(t => t.claimed);
+function renderTasks(box) {
+  ensureTasks();
+  const head = el('div', 'taskhead', `<b>Daily tasks</b><span>New tasks in ${fmtTime((S.tasks.next - Date.now()) / 1000)}</span>`); box.appendChild(head);
+  for (const t of S.tasks.list) {
+    const p = taskProg(t), done = p >= t.n;
+    const r = el('div', 'quest task' + (t.claimed ? ' claimed' : done ? ' done' : ''));
+    r.innerHTML = `<div class="qt">${t.claimed ? '✓ ' : ''}${t.text}</div><div class="qp"><i><b style="width:${p / t.n * 100}%"></b></i><span>${compact(p)} / ${compact(t.n)}</span></div><div class="qr">${priceTag(t.reward)}${t.reward.xp ? ` <span class="pt">${t.reward.xp} XP</span>` : ''}</div>`;
+    if (done && !t.claimed) { const b = el('button', 'btn gold', 'Claim'); b.onclick = () => { if (t.claimed) return; t.claimed = true; grant(t.reward); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; r.appendChild(b); }
+    box.appendChild(r);
+  }
+  if (S.tasks.list.length) {
+    const bonus = el('div', 'quest bonus' + (S.tasks.bonus ? ' claimed' : allTasksDone() ? ' done' : ''));
+    bonus.innerHTML = `<div class="qt">${S.tasks.bonus ? '✓ ' : ''}Finish all three tasks</div><div class="qr">${priceTag({ gems: 2 })} <span class="pt">+ a collection card</span></div>`;
+    if (allTasksDone() && !S.tasks.bonus) { const b = el('button', 'btn gold', 'Claim bonus'); b.onclick = () => { if (S.tasks.bonus) return; S.tasks.bonus = true; const parts = grant({ gems: 2, card: 1 }); showReward('Daily bonus', parts); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; bonus.appendChild(b); }
+    box.appendChild(bonus);
+  }
+  box.appendChild(el('div', 'taskhead', '<b>Director\'s goals</b>'));
+}
 let questSig = '';
 function renderQuests(force) {
-  const box = $('#questList'); const list = activeQuests(); const sig = list.map(x => x.q.id + x.p + x.done).join();
+  const box = $('#questList'); const list = activeQuests();
+  const sig = list.map(x => x.q.id + x.p + x.done).join() + '|' + S.tasks.list.map(t => taskProg(t) + (t.claimed ? 'c' : '')).join() + S.tasks.bonus + Math.floor((S.tasks.next - Date.now()) / 60000);
   if (!force && sig === questSig) return; questSig = sig; box.innerHTML = '';
   if (S.tut >= 0) { box.appendChild(el('p', 'empty', 'Finish Tilda\'s tutorial first. Goals unlock afterwards.')); return; }
+  renderTasks(box);
   if (!list.length) box.appendChild(el('p', 'empty', 'Every goal is complete. Wildgrove is legendary.'));
   for (const { q, p, done } of list) {
     const r = el('div', 'quest' + (done ? ' done' : ''));
@@ -1306,10 +1574,29 @@ function renderHub() {
     const P = M.parts || {};
     ex.appendChild(el('div', 'meterparts', [['Animal mood', P.mood, 40], ['Tidiness', P.clean, 25], ['Variety', P.variety, 15], ['Decor', P.decor, 10], ['Babies', P.babies, 10]].map(([l, v, w]) => `<div class="bar"><span>${l}</span><i><b style="width:${Math.round((v || 0) * 100)}%"></b></i><small>${w}%</small></div>`).join('')));
     ex.appendChild(el('p', 'hint', `${M.attraction} attraction stars · up to ${M.target} visitors · tickets ${ticketPrice()} coins each`));
+    const wl = Object.entries(S.wishLog).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    if (wl.length) { ex.appendChild(el('h3', '', 'Visitor wishes')); ex.appendChild(el('p', 'hint', `Granted ${S.stats.wishes}. Most missed: ${wl.map(([k, n]) => { const [kind, key] = k.split(':'); return `${wishName({ kind, key })} (${n}×)`; }).join(', ')}.`)); }
     ex.appendChild(el('h3', '', 'Settings'));
-    const rr = el('div', 'row wrap'); rr.appendChild(hbtn('mini ghost', 'Start a new zoo', () => { $('#resetConfirm').hidden = false; })); ex.appendChild(rr);
+    const st = S.settings, rr = el('div', 'row wrap');
+    rr.appendChild(hbtn('mini' + (st.muted ? ' ghost' : ' on'), `Sound ${st.muted ? 'off' : 'on'}`, () => { st.muted = !st.muted; applySettings(); if (!muted) audioUnlock(); }));
+    rr.appendChild(hbtn('mini' + (st.music === false ? ' ghost' : ' on'), `Music ${st.music === false ? 'off' : 'on'}`, () => { st.music = st.music === false; applySettings(); }));
+    rr.appendChild(hbtn('mini' + (st.night ? ' on' : ' ghost'), `Day & night ${st.night ? 'on' : 'off'}`, () => { st.night = !st.night; }));
+    ex.appendChild(rr);
+    const sr = el('div', 'row wrap');
+    sr.appendChild(hbtn('mini', `${ic('save', 14)} Save code & backup`, () => openSaveModal()));
+    sr.appendChild(hbtn('mini ghost', 'Start a new zoo', () => { $('#resetConfirm').hidden = false; }));
+    ex.appendChild(sr);
+    ex.appendChild(el('p', 'hint', 'Keys: B build · P paths · C clear · S storage · G goals · Z zoo · +/− zoom · M sound · Ctrl+Z undo decor · Esc close'));
     box.appendChild(ex);
   }
+}
+function openSaveModal() {
+  const m = $('#saveModal'); m.hidden = false; $('#saveOut').value = exportCode(); $('#saveIn').value = ''; $('#saveMsg').textContent = '';
+}
+function importSave(text) {
+  const s = parseSave(text);
+  if (!s) { $('#saveMsg').textContent = 'That doesn\'t look like a Wildgrove save. Paste the whole code or pick the .json file.'; sfx('no'); return; }
+  $('#saveModal').hidden = true; loadState(s); toast(`Zoo loaded: level ${S.level}, ${fmt(S.coins)} coins`, 'level'); sfx('level');
 }
 let hubLock = 0;
 function hbtn(cls, html, fn, dis) { const b = el('button', cls, html); b.onclick = () => { if (performance.now() < hubLock) return; hubLock = performance.now() + 700; fn(); hubSig = ''; renderHub(); updateHUD(); dirty(); }; if (dis) b.disabled = true; return b; }
@@ -1400,12 +1687,29 @@ let dirtyT = null; function dirty() { clearTimeout(dirtyT); dirtyT = setTimeout(
 
 // ---------- sound & music ----------
 let AC = null, muted = false, musicOn = true, musicT = null, master = null;
+function applySettings() { muted = !!S.settings.muted; musicOn = S.settings.music !== false; $('#btnSound').classList.toggle('off', muted); $('#btnSound').setAttribute('aria-pressed', String(!muted)); }
 function audioUnlock() { if (AC || muted) return; try { AC = new (window.AudioContext || window.webkitAudioContext)(); master = AC.createGain(); master.gain.value = 1; master.connect(AC.destination); startMusic(); } catch (e) {} }
 function tone(f, t0, len, vol, type) { const o = AC.createOscillator(), g = AC.createGain(); o.type = type || 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + len); o.connect(g).connect(master); o.start(t0); o.stop(t0 + len + 0.02); }
 function sfx(kind) {
   if (!AC || muted) return;
   const notes = { coin: [988, 1319], build: [330, 440], path: [520], food: [440, 554], water: [660, 784], pet: [523, 784], play: [587, 880], clean: [660, 880], adopt: [523, 659, 784], baby: [784, 988, 1175], level: [523, 659, 784, 1047], gem: [1175, 1568], no: [220, 180] }[kind] || [440];
   const t0 = AC.currentTime; notes.forEach((f, i) => tone(f, t0 + i * 0.07, 0.18, kind === 'path' ? 0.03 : 0.06, kind === 'no' ? 'square' : 'triangle'));
+}
+// a short call per species when you tap or care for it: [start Hz, end Hz, length s, wave, repeats]
+const VOICE = { bunny: [1500, 1800, 0.06, 'sine', 2], penguin: [520, 360, 0.2, 'square', 2], parrot: [1500, 2500, 0.1, 'square', 2], flamingo: [720, 520, 0.16, 'sawtooth', 2],
+  monkey: [900, 1600, 0.08, 'triangle', 3], meerkat: [1900, 1500, 0.05, 'sine', 3], redpanda: [1300, 1000, 0.1, 'triangle', 2], zebra: [460, 300, 0.22, 'sawtooth', 2],
+  crocodile: [120, 90, 0.35, 'sawtooth', 1], panda: [320, 260, 0.18, 'triangle', 1], polarbear: [170, 120, 0.4, 'sawtooth', 1], lion: [150, 80, 0.55, 'sawtooth', 1],
+  giraffe: [280, 320, 0.15, 'sine', 2], elephant: [320, 700, 0.45, 'sawtooth', 1], seal: [620, 420, 0.16, 'square', 3], otter: [1800, 2200, 0.06, 'sine', 3], turtle: [220, 180, 0.14, 'sine', 1] };
+let voiceT = 0;
+function voice(sp, baby) {
+  if (!AC || muted || performance.now() < voiceT) return; voiceT = performance.now() + 250;
+  const [f0, f1, len, type, n] = VOICE[sp] || [600, 700, 0.1, 'sine', 1], k = baby ? 1.5 : 1, vol = type === 'sawtooth' || type === 'square' ? 0.025 : 0.05;
+  for (let i = 0; i < n; i++) {
+    const t0 = AC.currentTime + i * (len + 0.04), o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0 * k, t0); o.frequency.exponentialRampToValueAtTime(f1 * k, t0 + len);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+    o.connect(g).connect(master); o.start(t0); o.stop(t0 + len + 0.02);
+  }
 }
 // gentle marimba-style loop: I–vi–IV–V in C, pentatonic melody
 function startMusic() {
@@ -1425,9 +1729,21 @@ function startMusic() {
   }, 120);
 }
 
+function openShop(tab) { setTool(null); closeSheets(); select(null); shopTab = tab; $('#shop').hidden = false; document.body.classList.add('sheet-open'); renderShop(); }
+function hotkey(e) {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.altKey || e.metaKey) return;
+  if (e.ctrlKey) { if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); undoPlace(); } return; }
+  if (!document.querySelector('.modal:not([hidden])')) {
+    const k = e.key.toLowerCase(), click = id => { e.preventDefault(); $(id).click(); };
+    if (k === 'b') click('#btnShop'); else if (k === 'p') click('#btnPath'); else if (k === 'c' || k === 'x') click('#btnBulldoze');
+    else if (k === 's') click('#btnStorage'); else if (k === 'g') click('#btnQuests'); else if (k === 'z') click('#btnHub');
+    else if (k === 'm') click('#btnSound'); else if (k === '+' || k === '=') click('#btnZoomIn'); else if (k === '-') click('#btnZoomOut');
+  }
+}
 // ---------- boot ----------
 function wireUI() {
   $('#btnShop').onclick = () => { setTool(null); if (openSheet('#shop')) renderShop(); };
+  window.addEventListener('keydown', hotkey);
   $('#btnPath').onclick = () => { closeSheets(); setTool(tool && tool.kind === 'path' ? null : { kind: 'path' }); };
   $('#btnBulldoze').onclick = () => { closeSheets(); setTool(tool && tool.kind === 'bulldoze' ? null : { kind: 'bulldoze' }); };
   $('#btnStorage').onclick = () => { setTool(null); if (openSheet('#storage')) { $('#storageBody').dataset.sig = ''; renderStorage(); } };
@@ -1439,21 +1755,29 @@ function wireUI() {
   $('#rewardOk').onclick = () => $('#reward').hidden = true;
   $('#tutSkip').onclick = skipTutorial;
   $('#tutOk').onclick = () => finishTutorial();
-  $('#btnSound').onclick = () => { muted = !muted; $('#btnSound').classList.toggle('off', muted); $('#btnSound').setAttribute('aria-pressed', String(!muted)); if (!muted) audioUnlock(); };
+  $('#btnSound').onclick = () => { S.settings.muted = !S.settings.muted; applySettings(); if (!muted) audioUnlock(); dirty(); };
   $('#meterChip').onclick = () => openHub('office');
   $('#btnZoomIn').onclick = () => { cam.z *= 1.2; clampCam(); };
   $('#btnZoomOut').onclick = () => { cam.z /= 1.2; clampCam(); };
   $('#resetNo').onclick = () => { $('#resetConfirm').hidden = true; };
-  $('#resetYes').onclick = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = newGame(); visitors = []; rebuild(); select(null); setTool(null); closeSheets(); $('#resetConfirm').hidden = true; $('#tutorial').dataset.step = ''; centerCam(); computeMeter(); updateHUD(); };
+  $('#resetYes').onclick = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} const keep = S.settings; S = null; const s = newGame(); s.settings = keep; s.cam = null; $('#resetConfirm').hidden = true; loadState(s); };
+  $('#saveClose').onclick = () => { $('#saveModal').hidden = true; };
+  $('#saveCopy').onclick = () => { const t = $('#saveOut'); t.select(); const ok = () => { $('#saveMsg').textContent = 'Copied! Paste it into Wildgrove on another device or browser.'; }; try { navigator.clipboard.writeText(t.value).then(ok, () => { document.execCommand('copy'); ok(); }); } catch (e) { document.execCommand('copy'); ok(); } };
+  $('#saveDownload').onclick = () => downloadSave();
+  $('#saveLoad').onclick = () => importSave($('#saveIn').value);
+  $('#saveFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(importSave); e.target.value = ''; };
+  $('#lowFood').onclick = () => openShop('supplies');
+  $('#btnDay').onclick = () => toast($('#btnDay').title);
+  $('#toolUndo').onclick = () => undoPlace();
   $('#icoCoin').appendChild(iconCanvas('coin', 22, 'icon')); $('#icoGem').appendChild(iconCanvas('gem', 22, 'icon')); $('#icoPaw').appendChild(iconCanvas('paw', 22, 'icon'));
   $('#icoVis').appendChild(iconCanvas('heart', 18, 'icon')); $('#icoStar').appendChild(iconCanvas('star', 18, 'icon'));
 }
 function boot(hot) {
   resize();
-  S = (hot && hot.S) || load() || newGame();
+  S = migrate((hot && hot.S) || load() || newGame());
   const ids = [...S.objects.flatMap(o => (o.animals || []).map(a => a.id)), ...S.storage.animals.map(a => a.id)];
   uid = Math.max(1, ...ids.filter(n => typeof n === 'number')) + 1000;
-  rebuild(); wireUI();
+  rebuild(); wireUI(); applySettings();
   if (S.cam) { cam.x = S.cam.x; cam.y = S.cam.y; cam.z = S.cam.z; clampCam(); } else centerCam();
   if (!hot) offlineProgress();
   computeMeter(); updateHUD(); tutorialCheck();

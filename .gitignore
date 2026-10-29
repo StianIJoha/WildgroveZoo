@@ -12,3 +12,4 @@ desktop.ini
 
 # Node (if a build tool is added later)
 node_modules/
+.claude/worktrees/
