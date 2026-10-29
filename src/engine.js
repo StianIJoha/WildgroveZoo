@@ -1798,7 +1798,10 @@ function openHub(tab) { hubTab = tab || hubTab; closeSheets(); select(null); $('
 function collComplete(b) { return S.cards[b].every(c => c > 0); }
 function renderHub() {
   const sig = [hubTab, S.event && eventPoints(), S.event && S.event.claimed, Date.now() >= S.wheelNext, Math.floor((S.wheelNext - Date.now()) / 60000), JSON.stringify(S.cards), S.collectionsDone.length, S.gems, S.owned, JSON.stringify(S.helpers.food > S.clock), Math.floor(S.clock / 30), spinning].join('|');
-  if (sig === hubSig) return; hubSig = sig;
+  if (sig === hubSig) return;
+  // don't rebuild under someone typing in the zoo name field
+  const fe = document.activeElement; if (fe && fe.tagName === 'INPUT' && $('#hubBody').contains(fe)) return;
+  hubSig = sig;
   const tabs = $('#hubTabs'); tabs.innerHTML = '';
   for (const [k, l] of [['event', 'Festival'], ['wheel', 'Wheel'], ['coll', 'Collections'], ['office', 'Zoo office']]) { const b = el('button', 'tab' + (k === hubTab ? ' on' : ''), l); b.onclick = () => { hubTab = k; renderHub(); }; tabs.appendChild(b); }
   const box = $('#hubBody'); box.innerHTML = '';
@@ -1885,7 +1888,7 @@ function takePhoto() {
   x.font = '800 18px Grandstander, Nunito, system-ui, sans-serif'; const w = x.measureText(label).width + 28;
   x.fillStyle = 'rgba(255,251,242,0.92)'; x.beginPath(); x.roundRect ? x.roundRect(14, H - 50, w, 36, 18) : x.rect(14, H - 50, w, 36); x.fill();
   x.fillStyle = '#2d6b3a'; x.textBaseline = 'middle'; x.fillText(label, 28, H - 31);
-  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.replace(/[^\w-]+/g, '-').toLowerCase()}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
+  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.normalize('NFKD').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'wildgrove'}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
   sfx('coin'); toast('Photo saved');
 }
 function openSaveModal() {
@@ -2079,13 +2082,13 @@ function startMusic() {
   const nChords = [[220, 261.6, 329.6], [174.6, 220, 261.6], [261.6, 329.6, 392], [196, 246.9, 293.7]];
   let beat = 0, next = AC.currentTime + 0.1;
   musicT = setInterval(() => {
+    rainSound(); // before the early return, so muting, music off or a hidden tab also stop the rain
     if (!AC || muted || !musicOn || document.hidden) { next = AC ? AC.currentTime + 0.1 : 0; return; }
     while (next < AC.currentTime + 0.5) {
       const night = DK > 0.5, bar = Math.floor(beat / 8) % 4, b = beat % 8, ch = (night ? nChords : chords)[bar], v = night ? 0.7 : 1;
       if (b === 0) ch.forEach(f => tone(f / 2, next, night ? 2.4 : 1.6, 0.025 * v, 'sine'));
       if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03 * v, night ? 'sine' : 'triangle');
       if (rnd() < (night ? 0.3 : 0.55)) tone(pent[Math.floor(rnd() * pent.length)] / (night ? 2 : 1), next, night ? 0.6 : 0.3, 0.022 * v, night ? 'sine' : 'triangle');
-      rainSound();
       // ambience: a bird now and then by day, cricket trills at night
       if (rnd() < (night ? 0.06 : 0.03)) ambience(night, next + rnd() * 0.2);
       next += night ? 0.4 : 0.28; beat++;
@@ -2126,7 +2129,7 @@ function wireUI() {
   $('#btnZoomIn').onclick = () => { cam.z *= 1.2; clampCam(); };
   $('#btnZoomOut').onclick = () => { cam.z /= 1.2; clampCam(); };
   $('#resetNo').onclick = () => { $('#resetConfirm').hidden = true; };
-  $('#resetYes').onclick = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} const keep = S.settings; S = null; const s = newGame(); s.settings = keep; s.cam = null; $('#resetConfirm').hidden = true; loadState(s); };
+  $('#resetYes').onclick = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} const keep = Object.assign({}, S.settings, { zooName: '' }); S = null; const s = newGame(); s.settings = keep; s.cam = null; $('#resetConfirm').hidden = true; loadState(s); };
   $('#saveClose').onclick = () => { $('#saveModal').hidden = true; };
   $('#saveCopy').onclick = () => { const t = $('#saveOut'); t.select(); const ok = () => { $('#saveMsg').textContent = 'Copied! Paste it into Wildgrove on another device or browser.'; }; try { navigator.clipboard.writeText(t.value).then(ok, () => { document.execCommand('copy'); ok(); }); } catch (e) { document.execCommand('copy'); ok(); } };
   $('#saveDownload').onclick = () => downloadSave();
