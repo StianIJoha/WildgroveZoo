@@ -1111,7 +1111,7 @@ function iconCanvas(id, size, kind, opts) {
   const x = c.getContext('2d'); x.scale(d, d);
   try {
     if (kind === 'icon' && ART.icons[id]) { x.translate(size / 2, size / 2); ART.icons[id](x, size * 0.9); }
-    else if (kind === 'animal' && ART.animals[id]) { const tall = id === 'giraffe' ? 82 : id === 'crocodile' ? 54 : 66; x.translate(size / 2, size * 0.9); const s = size / tall; x.scale(s, s); ART.animals[id](x, 0.5, Object.assign({ sex: 'm' }, opts || {})); }
+    else if (kind === 'animal' && ART.animals[id]) { const tall = id === 'giraffe' ? 82 : id === 'camel' ? 78 : id === 'crocodile' ? 54 : 66; x.translate(size / 2, size * 0.9); const s = size / tall; x.scale(s, s); ART.animals[id](x, 0.5, Object.assign({ sex: 'm' }, opts || {})); }
     else if (kind === 'decor' && ART.decor[id]) { const big = boxFor(id) === BOX2; x.translate(size / 2, size * (big ? 0.78 : 0.86)); const s = size / (big ? 150 : 90); x.scale(s, s); ART.decor[id](x, 0.5); }
     else if (kind === 'enc') { x.translate(size / 2, size / 2 + 6); const b = BIOMES[id]; const s = size / 80; x.scale(s, s); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const p = { x: (i - j) * 13, y: (i + j - 2) * 6.5 }; x.fillStyle = (i + j) % 2 ? b.g1 : b.g2; diamond(x, p.x, p.y, 13.5, 6.8); x.fill(); } x.strokeStyle = b.rail; x.lineWidth = 3; x.beginPath(); x.moveTo(-39, -6.5); x.lineTo(0, -26); x.lineTo(39, -6.5); x.stroke(); x.beginPath(); x.moveTo(-39, -6.5); x.lineTo(0, 13); x.lineTo(39, -6.5); x.stroke(); }
   } catch (e) {}

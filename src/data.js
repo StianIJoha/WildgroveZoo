@@ -35,7 +35,7 @@ const SPECIES = {
   turtle:    { name: 'Sea turtle', lvl: 11, cost: 1800, food: 'kelp',    appeal: 24, biome: 'coast',   breed: 540, grow: 1040, speed: 0.2,  care: 1.2 },
 };
 // how far above the feet the need icon floats, per species (default 42)
-const SPECIES_TOP = { giraffe: 66, crocodile: 22, elephant: 50, seal: 32, otter: 32, turtle: 26, bunny: 34, meerkat: 36 };
+const SPECIES_TOP = { giraffe: 66, crocodile: 22, elephant: 50, seal: 32, otter: 32, turtle: 26, fennec: 36, camel: 60, bunny: 34, meerkat: 36 };
 
 const FOODS = {
   hay:     { name: 'Hay',     price: 3 },

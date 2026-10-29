@@ -1392,6 +1392,128 @@ const ART = (function () {
     }
   });
 
+  // ================= DUNES ANIMALS =================
+  // ---- fennec fox: tiny sandy body, huge ears, bushy black-tipped tail (~24px, ear tips ~28) ----
+  animals.fennec = animal({
+    sw: 13, sx: -3, off: 0.9, speed: 11, swing: 2.4, h: 24, pal: [
+      { C: '#ecc690', D: '#c9995a', B: '#fff3dc', IN: '#ffb8a8', TT: '#6a4a2e', N: '#2e2224' },
+      { C: '#f3e2c4', D: '#d4bc94', B: '#fffaf0', IN: '#ffc4b8', TT: '#8a6a4a' },
+      { C: '#e2a062', D: '#b8753a', B: '#fff0d8', IN: '#ffa894', TT: '#4a2e1a' },
+      { C: '#c9c5bd', D: '#a29d94', B: '#f8f6f2', IN: '#f4b4c0', TT: '#3e3a40' },
+      { C: '#f6f2fb', D: '#d6cce6', B: '#ffffff', IN: '#d9b8ff', TT: '#a58ad6', N: '#4a3a5e' }],
+    draw(ctx, t, a) {
+      const P = a.p, C = P.C, D = P.D, OL = shade(C, -0.42);
+      const tw = a.mv ? Math.sin(a.ph) * 0.18 : Math.sin(t * 1.7 + 0.9) * 0.14;
+      // far legs (slim)
+      line(ctx, -6, -8, -6 - a.sw, -1.2, 1.9, D);
+      line(ctx, 5, -8, 5 + a.sw, -1.2, 1.9, D);
+      // bushy tail with a dark tip
+      ctx.save(); ctx.translate(-8.5, -10.5); ctx.rotate(tw);
+      const tail = (c) => { c.beginPath(); c.moveTo(0, -1.8); c.bezierCurveTo(-6, -4, -11, -1, -12.5, 4); c.bezierCurveTo(-11, 6.4, -7, 5.2, -4.5, 3.4); c.quadraticCurveTo(-1.5, 2.2, 0.6, 2); c.closePath(); };
+      tail(ctx); paint(ctx, C, OL, 1.3);
+      ctx.save(); tail(ctx); ctx.clip(); ell(ctx, -11.8, 3.8, 3.4, 3, 0, P.TT, false); ell(ctx, -5, -1.4, 4, 1, -0.2, 'rgba(255,255,255,0.3)', false); ctx.restore();
+      ctx.restore();
+      ctx.translate(0, a.bob * 0.8);
+      // body
+      ell(ctx, -1, -10.8, 9, 5.2, -0.04, C, OL);
+      ell(ctx, 1, -7.4, 6, 2.2, 0, P.B, false);
+      ell(ctx, -3, -14.2, 5, 1.2, -0.05, 'rgba(255,255,255,0.28)', false);
+      // head: ears first (far ear tilted back), then face
+      const look = a.mv ? 0 : Math.sin(t * 0.8 + 0.9) * 0.08;
+      const tw1 = Math.sin(t * 3 + 0.9) * 0.06, flick = ((t + 0.9) % 4.5 + 4.5) % 4.5 < 0.25 ? 0.22 : 0;
+      ctx.save(); ctx.translate(9, -15.5); ctx.rotate(look);
+      const ear = (x, rot, far) => {
+        ctx.save(); ctx.translate(x, -2.5); ctx.rotate(rot);
+        ctx.beginPath(); ctx.moveTo(-3.4, 0.5); ctx.quadraticCurveTo(-3.8, -7, -0.4, -11.5); ctx.quadraticCurveTo(3.6, -7, 3.4, 0.5); ctx.closePath();
+        paint(ctx, far ? shade(C, -0.08) : C, OL, 1.3);
+        ctx.beginPath(); ctx.moveTo(-2, -0.2); ctx.quadraticCurveTo(-2.2, -6, -0.4, -9.2); ctx.quadraticCurveTo(2.2, -6, 2, -0.2); ctx.closePath();
+        ctx.fillStyle = far ? shade(P.IN, -0.1) : P.IN; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(-1, -1); ctx.lineTo(-0.6, -5); ctx.moveTo(0.6, -1); ctx.lineTo(0.8, -4.6); ctx.stroke();
+        ctx.restore();
+      };
+      ear(-3, -0.45 + tw1, true);
+      ear(1.2, 0.18 - tw1 + flick, false);
+      ell(ctx, 0, 0, 4.6, 4, 0, C, OL);                               // head
+      ell(ctx, 3.6, 1.4, 3.6, 2.1, 0.12, C, OL, 1.2);                 // pointy snout
+      ell(ctx, 1.6, 2.2, 3.4, 1.8, 0.1, P.B, false);
+      ell(ctx, 6.8, 1.6, 1.1, 0.9, 0, P.N || INK, false);
+      ctx.strokeStyle = rgba(D, 0.9); ctx.lineWidth = 0.7;          // eye streak
+      ctx.beginPath(); ctx.moveTo(2.4, -0.6); ctx.quadraticCurveTo(3.8, 0.4, 4.6, 0.4); ctx.stroke();
+      eye(ctx, 1.6, -0.9, 1.45 * a.er, a.blink, a.f);
+      blush(ctx, 0.8, 1.8, 1.3);
+      ctx.restore();
+      // near legs
+      line(ctx, -3.5, -8, -3.5 + a.sw, -1.2, 2, C, OL);
+      line(ctx, 7, -8, 7 - a.sw, -1.2, 2, C, OL);
+      ell(ctx, 7.6 - a.sw, -1, 1.6, 0.9, 0, C, OL, 0.9);
+      ell(ctx, -2.9 + a.sw, -1, 1.6, 0.9, 0, C, OL, 0.9);
+    }
+  });
+
+  // ---- dromedary camel: one hump, long knobbly legs, U-shaped neck, calm chewing idle (~58px, head top ~57) ----
+  animals.camel = animal({
+    sw: 16, sx: 1, off: 3.3, speed: 5, swing: 3.4, h: 58, pal: [
+      { C: '#d9a866', D: '#b88a4c', OL: '#8a6430', MZ: '#ecc890', H: '#5a3e22', blanket: null, halter: null },
+      { C: '#a8744a', D: '#8a5c38', OL: '#5e3e22', MZ: '#c99a6e', H: '#3a2414' },
+      { C: '#f0dfbc', D: '#d8c49c', OL: '#a8916a', MZ: '#fff4dc', H: '#8a6a4a' },
+      { C: '#5c4c46', D: '#463a36', OL: '#2a2220', MZ: '#7a6a62', H: '#1e1816', halter: '#e8344f' },
+      { C: '#e2b46e', D: '#c4964e', OL: '#8a6430', MZ: '#f4d49c', H: '#5a3e22', blanket: ['#a77bff', '#ffd23f', '#ff5d73'], halter: '#ffd23f' }],
+    draw(ctx, t, a) {
+      const P = a.p, C = P.C, D = P.D, OL = P.OL;
+      const leg = (x, sw, far) => {
+        const col = far ? D : C;
+        tube(ctx, (c) => { c.moveTo(x, -28); c.lineTo(x + sw * 0.5, -14); c.lineTo(x + sw, -2.4); }, 3, col, OL);
+        circ(ctx, x + sw * 0.5, -14, 2, col, OL, 1.1);                   // knobbly knee
+        ell(ctx, x + sw + 0.6, -1.4, 2.8, 1.4, 0, shade(col, -0.12), OL, 1);   // wide pad
+      };
+      leg(-8, -a.sw, true); leg(8, a.sw, true);
+      const tw = Math.sin(t * 1.9 + 3.3) * 1.6;
+      tube(ctx, (c) => { c.moveTo(-14, -33); c.quadraticCurveTo(-16.5, -28, -15.5 + tw * 0.3, -22); }, 1.3, C, OL);
+      ell(ctx, -15.5 + tw * 0.3, -20.8, 1.3, 2.2, 0, P.H, false);
+      leg(-5, a.sw, false); leg(10, -a.sw, false);
+      ctx.translate(0, a.bob);
+      // body + hump
+      const body = (c) => { c.beginPath(); c.moveTo(-15, -31); c.bezierCurveTo(-16, -38, -10, -40, -8, -41); c.bezierCurveTo(-6, -50, 4, -50, 6, -40); c.bezierCurveTo(10, -39, 13, -37, 13, -32); c.bezierCurveTo(13, -26, 6, -24, -1, -24.5); c.bezierCurveTo(-9, -24.5, -15, -25, -15, -31); c.closePath(); };
+      body(ctx); paint(ctx, C, OL, 1.5);
+      ctx.save(); body(ctx); ctx.clip();
+      ell(ctx, -1, -24, 14, 3, 0, rgba(D, 0.55), false);
+      ell(ctx, -2, -46, 4, 1.6, -0.2, 'rgba(255,255,255,0.35)', false);
+      if (P.blanket) {                                                   // festival blanket draped over the hump
+        const B = P.blanket;
+        ctx.beginPath(); ctx.moveTo(-10, -42); ctx.bezierCurveTo(-6, -52, 5, -52, 8, -40); ctx.lineTo(8, -30); ctx.lineTo(-10, -30); ctx.closePath();
+        paint(ctx, B[0], shade(B[0], -0.4), 1.2);
+        ctx.fillStyle = B[1]; ctx.fillRect(-10, -33, 18, 2.2);
+        ctx.fillStyle = B[2]; for (let x = -8; x < 8; x += 4) { ctx.beginPath(); ctx.moveTo(x, -36.5); ctx.lineTo(x + 1.5, -38.5); ctx.lineTo(x + 3, -36.5); ctx.lineTo(x + 1.5, -34.5); ctx.closePath(); ctx.fill(); }
+      }
+      ctx.restore();
+      if (P.blanket) for (let x = -9; x <= 7; x += 4) { line(ctx, x, -30, x, -27.5, 0.6, P.blanket[1], shade(P.blanket[1], -0.4)); circ(ctx, x, -26.8, 1, P.blanket[2], false); }
+      // neck: dips forward from the shoulder, then rises to the head
+      const nb = a.mv ? Math.sin(a.ph) * 0.8 : Math.sin(t * 0.7 + 3.3) * 0.6;
+      tube(ctx, (c) => { c.moveTo(8, -35); c.bezierCurveTo(15, -32, 20, -36, 20 + nb * 0.4, -50 + nb); }, 6.2, C, OL);
+      ctx.strokeStyle = rgba(D, 0.6); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(11, -32.5); ctx.bezierCurveTo(16, -30.5, 21.5, -34, 22.4, -44); ctx.stroke();
+      // head with a slow chew (lower lip slides side to side)
+      const hx = 22 + nb * 0.4, hy = -51 + nb;
+      const chew = a.mv ? 0 : Math.sin(t * 5.5) * 0.7;
+      ctx.save(); ctx.translate(hx, hy); ctx.rotate(0.12);
+      ell(ctx, -3.6, -3.2, 1.2, 2.4, -0.5 + Math.sin(t * 2.1 + 3.3) * 0.12, C, OL, 1.1);   // ear
+      ell(ctx, 0, 0, 5.4, 3.8, 0.1, C, OL);                              // skull
+      ell(ctx, 5.2, 1.6, 3.6, 2.6, 0.25, P.MZ, OL, 1.2);                 // muzzle
+      ell(ctx, 5.8 + chew * 0.6, 4.2, 2.4, 1.3, 0.2, shade(P.MZ, -0.06), OL, 1.1);   // droopy lower lip
+      ctx.strokeStyle = P.H; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(7.4, 0.2); ctx.lineTo(8.2, 1); ctx.stroke(); // nostril slit
+      if (P.halter) {
+        ctx.strokeStyle = P.halter; ctx.lineWidth = 1.1;
+        ctx.beginPath(); ctx.moveTo(3, -2.2); ctx.quadraticCurveTo(4.6, 1.4, 3.4, 3.4); ctx.moveTo(3.4, 1); ctx.lineTo(8, 0.4); ctx.stroke();
+        circ(ctx, 3.2, 1.2, 0.8, P.halter, shade(P.halter, -0.4), 0.6);
+      }
+      // sleepy heavy-lidded eye with long lashes
+      eye(ctx, 0.8, -1, 1.35 * a.er, a.blink, true);
+      if (!a.blink) { ctx.beginPath(); ctx.arc(0.8, -1, 1.5 * a.er, PI * 1.05, PI * 1.95); ctx.strokeStyle = shade(C, -0.35); ctx.lineWidth = 1; ctx.stroke(); }
+      blush(ctx, 1.4, 1.8, 1.4);
+      ctx.restore();
+    }
+  });
+
   // ================= DECOR =================
   // iso prism: base parallelogram o, o+u, o+u+v, o+v at elevation z0, height h
   function cols(c) { return typeof c === 'string' ? { top: shade(c, 0.18), left: c, right: shade(c, -0.14), ol: shade(c, -0.42) } : c; }
@@ -3839,7 +3961,9 @@ const ART = (function () {
     crocodile: ['Nile crocodile', 'Saltwater crocodile', 'Stone crocodile', 'Black caiman', 'Albino crocodile'],
     seal: ['Harbour seal', 'Grey seal', 'Spotted seal', 'Ringed seal', 'Golden seal'],
     otter: ['River otter', 'Sea otter', 'Chocolate otter', 'Silver otter', 'Golden otter'],
-    turtle: ['Green sea turtle', 'Loggerhead turtle', 'Olive ridley', 'Hawksbill turtle', 'Jade turtle']
+    turtle: ['Green sea turtle', 'Loggerhead turtle', 'Olive ridley', 'Hawksbill turtle', 'Jade turtle'],
+    fennec: ['Fennec fox', 'Pale fennec', 'Ginger fennec', 'Silver fennec', 'Moonlight fennec'],
+    camel: ['Dromedary camel', 'Dark dromedary', 'Pale dromedary', 'Black camel', 'Festival camel']
   };
 
   return { animals: animals, decor: decor, person: person, icons: icons, guide: guide, wheel: wheel, variantNames: variantNames };
@@ -3884,7 +4008,7 @@ const SPECIES = {
   turtle:    { name: 'Sea turtle', lvl: 11, cost: 1800, food: 'kelp',    appeal: 24, biome: 'coast',   breed: 540, grow: 1040, speed: 0.2,  care: 1.2 },
 };
 // how far above the feet the need icon floats, per species (default 42)
-const SPECIES_TOP = { giraffe: 66, crocodile: 22, elephant: 50, seal: 32, otter: 32, turtle: 26, bunny: 34, meerkat: 36 };
+const SPECIES_TOP = { giraffe: 66, crocodile: 22, elephant: 50, seal: 32, otter: 32, turtle: 26, fennec: 36, camel: 60, bunny: 34, meerkat: 36 };
 
 const FOODS = {
   hay:     { name: 'Hay',     price: 3 },
@@ -5268,7 +5392,7 @@ function iconCanvas(id, size, kind, opts) {
   const x = c.getContext('2d'); x.scale(d, d);
   try {
     if (kind === 'icon' && ART.icons[id]) { x.translate(size / 2, size / 2); ART.icons[id](x, size * 0.9); }
-    else if (kind === 'animal' && ART.animals[id]) { const tall = id === 'giraffe' ? 82 : id === 'crocodile' ? 54 : 66; x.translate(size / 2, size * 0.9); const s = size / tall; x.scale(s, s); ART.animals[id](x, 0.5, Object.assign({ sex: 'm' }, opts || {})); }
+    else if (kind === 'animal' && ART.animals[id]) { const tall = id === 'giraffe' ? 82 : id === 'camel' ? 78 : id === 'crocodile' ? 54 : 66; x.translate(size / 2, size * 0.9); const s = size / tall; x.scale(s, s); ART.animals[id](x, 0.5, Object.assign({ sex: 'm' }, opts || {})); }
     else if (kind === 'decor' && ART.decor[id]) { const big = boxFor(id) === BOX2; x.translate(size / 2, size * (big ? 0.78 : 0.86)); const s = size / (big ? 150 : 90); x.scale(s, s); ART.decor[id](x, 0.5); }
     else if (kind === 'enc') { x.translate(size / 2, size / 2 + 6); const b = BIOMES[id]; const s = size / 80; x.scale(s, s); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const p = { x: (i - j) * 13, y: (i + j - 2) * 6.5 }; x.fillStyle = (i + j) % 2 ? b.g1 : b.g2; diamond(x, p.x, p.y, 13.5, 6.8); x.fill(); } x.strokeStyle = b.rail; x.lineWidth = 3; x.beginPath(); x.moveTo(-39, -6.5); x.lineTo(0, -26); x.lineTo(39, -6.5); x.stroke(); x.beginPath(); x.moveTo(-39, -6.5); x.lineTo(0, 13); x.lineTo(39, -6.5); x.stroke(); }
   } catch (e) {}
