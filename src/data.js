@@ -280,7 +280,7 @@ const TUTORIAL = [
   { text: 'Visitors come in through the gate and only walk on paths. Choose Paths and draw a path from the gate to your enclosure.', mood: 'happy', until: 'connected' },
   { text: 'Visitors pay a ticket, but the real money comes from shops. Open Build → Shops and put a Feeding station right next to a path.', mood: 'wink', until: 'feederBuilt' },
   { text: 'When a shop has filled up, a silver coin pops up over it. Tap it to collect. Keep animals happy and the zoo tidy so the Zoo meter stays high: a full meter fills shops faster and brings more visitors.', mood: 'happy', until: 'shopCollected' },
-  { text: 'You\'re a natural! Check Goals for what to do next. Pick up litter, keep the food stock up in Build → Supplies, and once you have a pair, they\'ll have babies. Good luck!', mood: 'wink', until: 'ok' },
+  { text: 'You\'re a natural! Check Goals for daily tasks and what to do next, and the Zoo hub for this week\'s festival. Visitors with a thought bubble have a wish you can grant. Keep the food stock up in Build → Supplies, and once you have a pair, they\'ll have babies. Good luck!', mood: 'wink', until: 'ok' },
 ];
 
 const VISITOR_SHIRTS = ['#e4572e', '#2e86ab', '#f2b632', '#8e5ea2', '#3f8f4e', '#ef7aa0', '#4dbfb0', '#f08a24'];

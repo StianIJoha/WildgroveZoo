@@ -3321,7 +3321,7 @@ const TUTORIAL = [
   { text: 'Visitors come in through the gate and only walk on paths. Choose Paths and draw a path from the gate to your enclosure.', mood: 'happy', until: 'connected' },
   { text: 'Visitors pay a ticket, but the real money comes from shops. Open Build → Shops and put a Feeding station right next to a path.', mood: 'wink', until: 'feederBuilt' },
   { text: 'When a shop has filled up, a silver coin pops up over it. Tap it to collect. Keep animals happy and the zoo tidy so the Zoo meter stays high: a full meter fills shops faster and brings more visitors.', mood: 'happy', until: 'shopCollected' },
-  { text: 'You\'re a natural! Check Goals for what to do next. Pick up litter, keep the food stock up in Build → Supplies, and once you have a pair, they\'ll have babies. Good luck!', mood: 'wink', until: 'ok' },
+  { text: 'You\'re a natural! Check Goals for daily tasks and what to do next, and the Zoo hub for this week\'s festival. Visitors with a thought bubble have a wish you can grant. Keep the food stock up in Build → Supplies, and once you have a pair, they\'ll have babies. Good luck!', mood: 'wink', until: 'ok' },
 ];
 
 const VISITOR_SHIRTS = ['#e4572e', '#2e86ab', '#f2b632', '#8e5ea2', '#3f8f4e', '#ef7aa0', '#4dbfb0', '#f08a24'];
@@ -3946,8 +3946,8 @@ function frame(now) {
     const r0 = performance.now(); render(); const rt = performance.now() - r0;
     rEma = rEma * 0.95 + rt * 0.05; qT += dt;
     if (qT > 2.5) { qT = 0;
-      if (rEma > 18 && quality > 0.5) { quality = Math.max(0.5, quality - 0.25); resize(); spriteCache.clear(); groundDirty = forestDirty = true; }
-      else if (quality < 1 && rEma * Math.pow((quality + 0.25) / quality, 2) < 12) { quality = Math.min(1, quality + 0.25); resize(); spriteCache.clear(); groundDirty = forestDirty = true; } }
+      if (rEma > 18 && quality > 0.5) { quality = Math.max(0.5, quality - 0.25); resize(); spriteCache.clear(); iconCache.clear(); groundDirty = forestDirty = true; }
+      else if (quality < 1 && rEma * Math.pow((quality + 0.25) / quality, 2) < 12) { quality = Math.min(1, quality + 0.25); resize(); spriteCache.clear(); iconCache.clear(); groundDirty = forestDirty = true; } }
     uiT += dt; if (uiT > 0.3) { uiT = 0; updateHUD(); if (selected) renderPanel(); tutorialCheck(); if (!$('#storage').hidden) renderStorage(); if (!$('#hub').hidden) renderHub(); }
     saveT += dt; if (saveT > 8) { saveT = 0; save(); }
   } catch (e) { if (!frameErr) { frameErr = true; console.error(e); } }
@@ -4087,7 +4087,7 @@ function drawEncGround(e) {
   if (!hungry && e.animals.length) { ctx.fillStyle = '#9ccc4a'; ctx.beginPath(); ctx.ellipse(tp.x, tp.y - 1.5, 8, 3, 0, 0, Math.PI * 2); ctx.fill(); }
   ctx.fillStyle = '#8f9aa3'; ctx.beginPath(); ctx.ellipse(wp.x, wp.y, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = thirsty || !e.animals.length ? '#6d757c' : '#5fb6e0'; ctx.beginPath(); ctx.ellipse(wp.x, wp.y - 1, 8, 3.3, 0, 0, Math.PI * 2); ctx.fill();
-  for (const d of e.dung) { const p = iso(e.gx + d.lx, e.gy + d.ly); if (ART.icons.poop) { ctx.save(); ctx.translate(p.x, p.y - 4); ART.icons.poop(ctx, 13); ctx.restore(); } }
+  for (const d of e.dung) { const p = iso(e.gx + d.lx, e.gy + d.ly); if (ART.icons.poop) drawIcon('poop', p.x, p.y - 4, 13); }
   if (selected === e) {
     ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]); ctx.lineDashOffset = -T * 12;
     const a = iso(e.gx, e.gy), r = iso(e.gx + e.w, e.gy), bt = iso(e.gx + e.w, e.gy + e.h), l = iso(e.gx, e.gy + e.h);
@@ -4117,7 +4117,19 @@ function drawDecorSprite(type, x, y, alpha, scale) {
   else { ctx.fillStyle = '#c98e64'; ctx.fillRect(-18, -30, 36, 30); ctx.fillStyle = '#fff'; ctx.font = '700 9px Nunito, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(type, 0, -12); }
   ctx.restore();
 }
-function drawIcon(id, x, y, size) { ctx.save(); ctx.translate(x, y); const f = ART.icons && ART.icons[id]; if (f) { try { f(ctx, size); } catch (e) {} } else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, size / 2.5, 0, 7); ctx.fill(); ctx.fillStyle = '#2e3a2a'; ctx.font = `800 ${size * 0.4}px Nunito`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(id.slice(0, 2), 0, 0); } ctx.restore(); }
+// icons are static, so world-space ones are drawn from bitmaps cached per size and zoom bucket
+const iconCache = new Map();
+function iconSprite(id, size) {
+  const sc = scaleBucket(), key = id + '|' + size + '|' + sc; let c = iconCache.get(key);
+  if (!c) {
+    const box = Math.ceil(size * 1.5); c = document.createElement('canvas'); c.width = c.height = Math.ceil(box * sc);
+    const x = c.getContext('2d'); x.setTransform(sc, 0, 0, sc, box * sc / 2, box * sc / 2);
+    try { ART.icons[id](x, size); } catch (e) {}
+    c.box = box; iconCache.set(key, c); if (iconCache.size > 300) iconCache.delete(iconCache.keys().next().value);
+  }
+  return c;
+}
+function drawIcon(id, x, y, size) { const f = ART.icons && ART.icons[id]; if (f) { const c = iconSprite(id, size); ctx.drawImage(c, x - c.box / 2, y - c.box / 2, c.box, c.box); return; } ctx.save(); ctx.translate(x, y); if (f) { try { f(ctx, size); } catch (e) {} } else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, size / 2.5, 0, 7); ctx.fill(); ctx.fillStyle = '#2e3a2a'; ctx.font = `800 ${size * 0.4}px Nunito`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(id.slice(0, 2), 0, 0); } ctx.restore(); }
 
 function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -4147,7 +4159,7 @@ function render() {
     diamond(ctx, p.x, p.y, TW / 2, TH / 2); ctx.fill();
   }
   if (DK > 0.01) drawNight(DK, on);
-  drawBubbles();
+  drawBubbles(); drawGhostLabel();
   for (const f of floaters) {
     ctx.save(); ctx.globalAlpha = Math.max(0, 1 - f.t / 1.4); ctx.font = '800 15px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(46,58,42,0.8)'; ctx.strokeText(f.text, f.wx, f.wy - f.t * 28); ctx.fillStyle = f.color; ctx.fillText(f.text, f.wx, f.wy - f.t * 28); ctx.restore();
@@ -4215,6 +4227,7 @@ function pushEnc(items, e) {
     const p = iso(e.gx + 1.5, e.gy + 1.5);
     const list = [];
     if (!e.animals.length) list.push({ icon: 'heart', text: 'Add', act: 'select' });
+    else if (!e._conn && S.tut < 0) list.push({ icon: 'lock', text: 'No path', act: 'select', warn: true });
     const counts = {}; let sick = 0;
     for (const a of e.animals) { if (a.sick) sick++; for (const n of activeNeeds(a)) counts[n] = (counts[n] || 0) + 1; }
     if (sick) list.push({ icon: 'medicine', act: 'heal', n: sick, warn: true });
@@ -4267,7 +4280,7 @@ function drawAnimal(e, a) {
   if (fn) { try { fn(ctx, T + a.phase, { baby: a.baby, flip: a.flip, moving: a.moving, sex: a.sex, variant: a.variant }); } catch (er) {} }
   const top = -topOf(a);
   if (a.sick) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon('sick', 0, top - 6 + bob, 15); }
-  else { const n = activeNeeds(a); if (n.length) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon(n[0] === 'food' ? SPECIES[a.species].food : n[0], 0, top - 6 + bob, 13); }
+  else if (cam.z >= 0.6) { const n = activeNeeds(a); if (n.length) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon(n[0] === 'food' ? SPECIES[a.species].food : n[0], 0, top - 6 + bob, 13); }
     else if (a.sleep && !a.moving) { ctx.save(); ctx.globalAlpha = 0.85; drawIcon('zzz', 6, top - 4 - (T * 6 + a.phase * 3) % 8, 12); ctx.restore(); } }
   if (a.heart > 0) { a.heart -= 1 / 60; ctx.globalAlpha = Math.min(1, a.heart); drawIcon('heart', 8, top - 10 - (1.2 - a.heart) * 12, 12); }
   ctx.restore();
@@ -4276,7 +4289,7 @@ function drawVisitor(v, p) {
   const fade = Math.max(0, Math.min(1, v.life + 60 - v.age, v.age * 2));
   ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y);
   if (ART.person) { try { ART.person(ctx, T + v.life, { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip }); } catch (e) {} }
-  if (v.heart > 0) { v.heart -= 1 / 60; ctx.save(); ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); if (ART.icons.heart) ART.icons.heart(ctx, 12); ctx.restore(); }
+  if (v.heart > 0) { v.heart -= 1 / 60; ctx.save(); ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); drawIcon('heart', 0, 0, 12); ctx.restore(); }
   else if (v.sad > 0) { v.sad -= 1 / 60; ctx.globalAlpha = fade * Math.min(1, v.sad); ctx.font = '700 13px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(46,58,42,.7)'; ctx.lineWidth = 3; ctx.strokeText('☹', 0, -36); ctx.fillText('☹', 0, -36); }
   ctx.restore();
   if (v.wish && cam.z > 0.55) bubbles.push({ wx: p.x, wy: p.y - 46, wish: v, small: true });
@@ -4291,6 +4304,25 @@ function drawGhost(gx, gy) {
   else if (tool.kind === 'move' && tool.obj.kind === 'enc') { const h = tool.obj; ctx.globalAlpha = 0.75; for (const a of h.animals) { const p = iso(gx + a.lx, gy + a.ly), fn = ART.animals[a.species]; if (fn) { ctx.save(); ctx.translate(p.x, p.y); fn(ctx, T + a.phase, { baby: a.baby, flip: a.flip, sex: a.sex, variant: a.variant }); ctx.restore(); } } }
   else drawDecorSprite('construction3', c.x, c.y, 0.5);
   ctx.restore();
+  // placement hints: a bin's litter range, and whether a shop or building would be reachable
+  if (t === 'trashbin') {
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+    const a = iso(gx - 3, gy - 3), r = iso(gx + 4, gy - 3), bt = iso(gx + 4, gy + 4), l = iso(gx - 3, gy + 4);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(r.x, r.y); ctx.lineTo(bt.x, bt.y); ctx.lineTo(l.x, l.y); ctx.closePath(); ctx.stroke(); ctx.restore();
+  }
+  const kind = tool.kind === 'move' ? tool.obj.kind : tool.kind === 'place' ? tool.item.kind : tool.kind;
+  if (ok && (kind === 'shop' || kind === 'bld' || kind === 'enc')) {
+    const conn = touchesReach({ gx, gy, w: f.w, h: f.h });
+    ghostLabel = { x: c.x, y: c.y - (kind === 'enc' ? 40 : 30) - 20 * f.w, text: conn ? 'Next to a path ✓' : kind === 'shop' ? 'Needs a path next to it' : 'No path yet', ok: conn };
+  }
+}
+let ghostLabel = null;
+function drawGhostLabel() {
+  const g = ghostLabel; ghostLabel = null; if (!g) return;
+  ctx.save(); ctx.font = '800 12px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(g.text).width + 18;
+  ctx.fillStyle = g.ok ? 'rgba(45,107,58,0.92)' : 'rgba(170,60,55,0.92)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(g.x - w / 2, g.y - 11, w, 22, 11) : ctx.rect(g.x - w / 2, g.y - 11, w, 22); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText(g.text, g.x, g.y + 0.5); ctx.restore();
 }
 function drawWishBubble(b) {
   const w = b.wish.wish; if (!w) return;
@@ -4458,7 +4490,7 @@ function setTool(t) {
 let animalMove = null, panelSig = '', confirmRemove = null, adoptOpen = false;
 function select(o) { if (o !== selected) { animalMove = null; confirmRemove = null; adoptOpen = false; } selected = o; if (o) closeSheets(); renderPanel(true); }
 function sigOf(o) {
-  if (o.kind === 'enc') return [o.id, o.build ? 'b' : '', o.level, o.species, (o.toys || []).join(), S.paws, o.animals.map(a => a.id + (a.baby ? 'b' : '') + (a.sick ? 's' : '')).join(), animalMove, confirmRemove === o, adoptOpen, S.storage.animals.length, Math.floor(S.coins / 50)].join('|');
+  if (o.kind === 'enc') return [o.id, o.build ? 'b' : '', o.level, o.species, (o.toys || []).join(), S.paws, o._conn, o.animals.map(a => a.id + (a.baby ? 'b' : '') + (a.sick ? 's' : '')).join(), animalMove, confirmRemove === o, adoptOpen, S.storage.animals.length, Math.floor(S.coins / 50)].join('|');
   if (o.kind === 'bld') return [o.id, o.build ? 'b' : '', JSON.stringify(o.slots.map(s => s.rec.baby)), o.job && o.job.done, !!o.job, S.storage.animals.length, labPick.join()].join('|');
   return [o.kind, o.id, o.build ? 'b' : '', o.prog >= 1].join('|');
 }
@@ -4525,6 +4557,7 @@ function encPanel(P, o) {
   head.appendChild(o.species ? iconCanvas(o.species, 56, 'animal', { variant: o.variant }) : iconCanvas(o.biome, 56, 'enc'));
   head.appendChild(el('div', '', `<div class="eyebrow">${B.name} · Level ${o.level + 1}</div><h2>${encLabel(o)}</h2><div class="sub">${o.animals.length} / ${capOf(o)} animals${o.species && o.variant ? ' · ' + VNAME(o.species, o.variant) + ' <span class="deg">' + DEGREE[o.variant] + '</span>' : ''}</div></div>`));
   P.appendChild(head);
+  if (o.animals.length && !o._conn) P.appendChild(el('p', 'empty warnbox', 'Visitors can\'t see these animals. Lay a path from the gate that touches this enclosure\'s fence.'));
   if (o.animals.length) {
     const bars = el('div', 'bars');
     bars.innerHTML = `<div class="bar"><span>Mood</span><i><b data-live="mood"></b></i><small data-live="moodt"></small></div><div class="bar"><span>Clean</span><i><b data-live="clean"></b></i><small data-live="cleant"></small></div>`;
