@@ -11,12 +11,15 @@ const SEC = Q.get('s') || 'all';
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const SPECIES = Object.keys(ART.animals);
 const NEWDECOR1 = ['feeder','lemonade','fries','toys','icecream','candy','souvenir','trashbin','crate','construction'];
+const NEWDECOR2 = ['hedge','statue','picnic','playground','pond','arch','torch','blossomtree','parasol','pumpkins','snowman'];
+const TOYS = ['toyBall','toyLog','toyTire','toyPost'];
 const BIG = [['nursery',2],['lab',2],['safari',2],['construction2',2],['construction3',3]];
-const NEWICONS = ['hay','fruit','meat','fish','seeds','insects','bamboo','water','pet','play','medicine','sick','paw','silvercoin','hourglass','wheel','card','crate','lock','expand','storage','nurseryicon','labicon','safariicon','trash'];
+const NEWICONS = ['hay','fruit','meat','fish','seeds','insects','bamboo','water','pet','play','medicine','sick','paw','silvercoin','hourglass','wheel','card','crate','lock','expand','storage','nurseryicon','labicon','safariicon','trash',
+  'vet','sun','moon','task','wish','trophy','calendar','save','undo','toy','ticket','kelp','event'];
 const SECS = {
-  animals: { w: 1200, h: 14 * 72 + 30 },
-  decor: { w: 1200, h: 700 },
-  ui: { w: 1200, h: 760 },
+  animals: { w: 1200, h: SPECIES.length * 72 + 30 },
+  decor: { w: 1200, h: 920 },
+  ui: { w: 1200, h: 840 },
 };
 window.errors = [];
 function size() {
@@ -70,7 +73,19 @@ function drawAll(t) {
       safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
       cross(x, base); label(x, base + 16 * n + 14, id + ' (' + n + 'x' + n + ')');
     });
-    // tiny scene: shops next to existing ones
+    // coast/park decor + seasonal event decor (1x1), then enrichment toys
+    NEWDECOR2.forEach((id, i) => {
+      const x = 70 + (i % 8) * 140, base = y0 + 680 + Math.floor(i / 8) * 150;
+      diamond(x, base);
+      safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
+      cross(x, base); label(x, base + 28, id);
+    });
+    TOYS.forEach((id, i) => {
+      const x = 760 + i * 90, base = y0 + 830;
+      diamond(x, base);
+      safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
+      cross(x, base); label(x, base + 28, id);
+    });
     y0 += SECS.decor.h;
   }
   if (SEC === 'all' || SEC === 'ui') {
@@ -83,7 +98,7 @@ function drawAll(t) {
     });
     const moods = ['happy', 'surprised', 'wink'];
     moods.forEach((m, i) => {
-      const x = 90 + i * 150, y = y0 + 260;
+      const x = 90 + i * 150, y = y0 + 340;
       ctx.fillStyle = '#fff6e0'; ctx.fillRect(x - 64, y - 64, 128, 128); ctx.strokeStyle = '#a08060'; ctx.strokeRect(x - 64, y - 64, 128, 128);
       safe(() => { ctx.translate(x, y); ART.guide(ctx, 128, t, m); }, 'guide');
       label(x, y + 78, 'guide ' + m);
@@ -94,10 +109,10 @@ function drawAll(t) {
       {color: '#ff5d73', label: '100', icon: 'coin'}, {color: '#ffd23f', label: 'Gem', icon: 'gem'}, {color: '#4cc3ff', label: 'Food x5', icon: 'fruit'},
       {color: '#7ccf5a', label: '3 Paws', icon: 'paw'}, {color: '#a77bff', label: 'Rare card', icon: 'card'}, {color: '#ff9f43', label: '250', icon: 'coin'},
       {color: '#5ec8c8', label: 'Medicine', icon: 'medicine'}, {color: '#ff7aa2', label: 'JACKPOT!', icon: 'star'}];
-    safe(() => { ctx.translate(720, y0 + 400); ART.wheel(ctx, 150, t * 0.7, segs); }, 'wheel');
-    safe(() => { ctx.translate(1010, y0 + 330); ART.wheel(ctx, 70, -t, segs.slice(0, 6)); }, 'wheel');
-    safe(() => { ctx.translate(1010, y0 + 500); ART.wheel(ctx, 40, 0, segs.slice(0, 4).map((s) => ({color: s.color, label: s.label, icon: null}))); }, 'wheel');
-    label(720, y0 + 570, 'wheel r=150 (8 segs), r=70, r=40 no icons');
+    safe(() => { ctx.translate(720, y0 + 480); ART.wheel(ctx, 150, t * 0.7, segs); }, 'wheel');
+    safe(() => { ctx.translate(1010, y0 + 410); ART.wheel(ctx, 70, -t, segs.slice(0, 6)); }, 'wheel');
+    safe(() => { ctx.translate(1010, y0 + 580); ART.wheel(ctx, 40, 0, segs.slice(0, 4).map((s) => ({color: s.color, label: s.label, icon: null}))); }, 'wheel');
+    label(720, y0 + 650, 'wheel r=150 (8 segs), r=70, r=40 no icons');
     // 1x scene row
     y0 += SECS.ui.h;
   }
