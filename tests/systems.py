@@ -40,6 +40,7 @@ INIT = """
 SETUP = """(opts) => {
   const g = window.__wg, S = g.S; opts = opts || {};
   if (S.tut >= 0) g.skipTutorial();
+  S.settings.weather = !!opts.weather; S.weather = null;   // random showers would refill water needs mid-test
   S.coins = 100000; S.gems = 50; S.paws = 30; S.level = opts.level || 12; S.medicine = 5;
   S.objects = S.objects.filter(o => o.kind === 'gate'); S.storage.animals = []; S.litter = [];
   g.rebuild();
@@ -918,6 +919,124 @@ async def main():
                     await ph.screenshot(path=f'{shots}/{w}-build.png')
                 await ph.close()
         await section('new ui layouts', new_layouts)
+
+        # ---------------------------------------------------------------- weather
+        async def weather():
+            await fresh(pg, tutorial=True)
+            r = await ev(pg, "() => { const g = window.__wg, S = g.S; S.weather = { kind: 'rain', until: S.clock + 100 }; for (let i = 0; i < 20; i++) g.tick(0.1); return g.WX; }")
+            check(r is None, 'no weather during the tutorial')
+            ids = await ev(pg, SETUP, {'weather': True})
+            r = await ev(pg, """(id) => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.id === id); S.clock = 900 * 3 + 50;
+                S.weather = { kind: 'rain', until: S.clock + 60 }; for (const a of e.animals) a.due.water = S.clock - 1; const c0 = S.stats.care;
+                for (let i = 0; i < 35; i++) g.tick(0.1);
+                return { wx: g.WX, thirsty: e.animals.filter(a => S.clock >= a.due.water).length, care: S.stats.care - c0 }; }""", ids['enc'])
+            check(r['wx'] == 'rain' and r['thirsty'] == 0, f"rain fills every water trough within ~3 s ({r['thirsty']} still thirsty)")
+            # average crowd over the same daytime stretch, dry and then rainy (the target itself wobbles with the meter)
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; const run = kind => { S.clock = 900 * 20 + (kind ? 1800 : 0); S.weather = { kind, until: S.clock + 1e4 };
+                    let sum = 0, n = 0, tsum = 0; for (let i = 0; i < 4500; i++) { g.tick(0.1); if (i > 1500) { sum += g.visitors().length; tsum += g.M.target; n++; } } return [sum / n, tsum / n]; };
+                const [dry, tdry] = run(null), [wet, twet] = run('rain'); return { dry, wet, tdry, twet }; }""")
+            check(r['wet'] < r['dry'] * 0.85 and r['wet'] > 0, f"rain thins the crowd (avg {r['dry']:.1f} visitors dry vs {r['wet']:.1f} in rain; target {r['tdry']:.1f}/{r['twet']:.1f})")
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; S.weather = { kind: 'rain', until: S.clock + 0.5 }; for (let i = 0; i < 20; i++) g.tick(0.1);
+                return { kind: S.weather.kind, dry: S.weather.until - S.clock, wx: g.WX }; }""")
+            check(r['kind'] is None and r['dry'] > 200 and r['wx'] is None, f"a shower is followed by a dry spell ({r['dry']:.0f} s)")
+            # snow cheers up ice-floe animals
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; g.setTool({ kind: 'enc', biome: 'ice' }); g.place(17, 17); g.setTool(null);
+                const e = S.objects.find(o => o.gx === 17 && o.gy === 17); e.build = S.clock; g.tick(0.01); g.adopt(e, 'penguin', 'm', 0);
+                const a = e.animals[0]; for (const n in a.due) a.due[n] = S.clock - 1; e.dung = [];
+                S.weather = { kind: null, until: S.clock + 1e4 }; g.tick(0.01); const dry = g.WX;
+                const m = () => { g.computeMeter(); return g.M.parts.mood; };
+                const without = m(); S.weather = { kind: 'snow', until: S.clock + 100 }; g.tick(0.01); const wx = g.WX, withSnow = m();
+                return { dry, wx, without, withSnow }; }""")
+            check(r['wx'] == 'snow' and r['withSnow'] > r['without'], f"snow lifts ice-floe mood ({r['without']:.3f} → {r['withSnow']:.3f})")
+            # showers roll by themselves, and snow only falls in winter
+            for label, when, want_snow in [('July', 1784116800000, False), ('January', 1767960000000, True)]:
+                r = await ev(pg, f"""() => {{ window.__setNow({when}); const g = window.__wg, S = g.S; const kinds = new Set();
+                    for (let k = 0; k < 40; k++) {{ S.weather = {{ kind: null, until: 0 }}; for (let i = 0; i < 3000 && !(S.weather && S.weather.kind); i++) g.tick(0.1); if (S.weather.kind) kinds.add(S.weather.kind); }}
+                    window.__resetNow(); return [...kinds]; }}""")
+                check(len(r) > 0 and (('snow' in r) == want_snow), f"in {label} showers roll on their own: {r}")
+            # settings toggle
+            await ev(pg, "() => { const S = window.__wg.S; S.weather = { kind: 'rain', until: S.clock + 1e4 }; window.__wg.tick(0.01); window.__wg.openHub('office'); }")
+            await pg.wait_for_timeout(750)
+            await pg.click('#hubBody button:has-text("Weather on")')
+            r = await ev(pg, "() => { const g = window.__wg; g.tick(0.05); return { set: g.S.settings.weather, wx: g.WX }; }")
+            check(r['set'] is False and r['wx'] is None, 'turning Weather off in the Zoo office stops the rain at once')
+            await pg.click('#hub [data-close]')
+            # rain is drawn without errors at both zooms and on top of night
+            await ev(pg, "() => { const g = window.__wg, S = g.S; S.settings.weather = true; S.weather = { kind: 'rain', until: S.clock + 1e4 }; S.clock = 900 * 6 + 0.8 * 900; }")
+            await pg.wait_for_timeout(400)
+            await ev(pg, "() => { const g = window.__wg, S = g.S; S.weather = { kind: 'snow', until: S.clock + 1e4 }; g.cam.z = 0.6; }")
+            await pg.wait_for_timeout(400)
+            await ev(pg, "() => { const g = window.__wg; g.S.settings.weather = false; g.cam.z = 1; }")
+        await section('weather', weather)
+
+        # ---------------------------------------------------------------- rain and ambient sound
+        async def sound():
+            await fresh(pg)
+            # count looping noise sources (the rain hiss) that are started and stopped
+            await ev(pg, """() => { window.__rain = { on: 0, off: 0 }; const P = AudioBufferSourceNode.prototype, st = P.start, sp = P.stop;
+                P.start = function (...a) { if (this.loop) window.__rain.on++; return st.apply(this, a); };
+                P.stop = function (...a) { if (this.loop) window.__rain.off++; return sp.apply(this, a); };
+                const S = window.__wg.S; S.settings.muted = false; S.settings.music = true; S.settings.weather = true; S.weather = { kind: 'rain', until: S.clock + 1e4 }; }""")
+            if await ev(pg, "() => window.__wg.S.settings.muted"):
+                await pg.click('#btnSound')
+            p = await ev(pg, "() => window.__wg.scr(18, 18)")
+            await pg.mouse.click(p['x'], p['y'])          # a real gesture unlocks WebAudio
+            await pg.wait_for_timeout(1200)
+            r0 = await ev(pg, "() => ({ ...window.__rain, wx: window.__wg.WX })")
+            check(r0['on'] == 1 and r0['off'] == 0, f"rain starts a rain sound ({r0})")
+            await pg.click('#btnSound')                   # mute while it rains
+            await pg.wait_for_timeout(1500)
+            r1 = await ev(pg, "() => ({ ...window.__rain, muted: window.__wg.S.settings.muted })")
+            check(r1['muted'] and r1['off'] == 1, f"muting during rain stops the rain sound ({r1})")
+            await pg.click('#btnSound')
+            await ev(pg, "() => { const S = window.__wg.S; S.settings.weather = false; S.clock = 900 * 8 + 0.8 * 900; }")
+            await pg.wait_for_timeout(1500)              # night crickets and day birds run inside the music loop
+            r2 = await ev(pg, "() => window.__rain")
+            check(r2['off'] >= r2['on'] - 0, f"the rain sound stops when the rain does ({r2})")
+        await section('sound', sound)
+
+        # ---------------------------------------------------------------- zoo name & photo
+        async def name_photo():
+            await fresh(pg)
+            await ev(pg, "() => window.__wg.openHub('office')")
+            await pg.wait_for_timeout(200)
+            await pg.fill('#hubBody .namefield', 'Sunny Acres')
+            await pg.press('#hubBody .namefield', 'Enter')
+            await pg.wait_for_timeout(400)
+            r = await ev(pg, "() => ({ hud: document.querySelector('#zooName').textContent, title: document.title, gate: ART.gateLabel, saved: window.__wg.S.settings.zooName })")
+            check(r['hud'] == 'Sunny Acres' and 'Sunny Acres' in r['title'] and r['gate'] == 'Sunny Acres' and r['saved'] == 'Sunny Acres', f"zoo name updates the HUD, title, gate sign and save ({r})")
+            # typing a name must survive the hub's periodic refresh (it re-renders every 30 game seconds)
+            await pg.click('#hubBody .namefield')
+            await pg.fill('#hubBody .namefield', '')
+            await pg.keyboard.type('Otter')
+            await ev(pg, "() => { window.__wg.S.clock += 31; }")
+            await pg.wait_for_timeout(500)
+            await pg.keyboard.type(' Bay Park')     # keeps typing, as a player would
+            await pg.wait_for_timeout(200)
+            r = await ev(pg, "() => { const f = document.querySelector('#hubBody .namefield'); return { value: f && f.value, focused: document.activeElement === f, tool: window.__wg.tool && window.__wg.tool.kind, hub: !document.querySelector('#hub').hidden }; }")
+            check(r['value'] == 'Otter Bay Park' and r['focused'] and r['tool'] is None and r['hub'], f"typing a zoo name survives the hub's 30-second refresh (no lost focus, no hotkeys firing) ({r})")
+            await ev(pg, "() => { window.__wg.setTool(null); window.__wg.openHub('office'); }")
+            await pg.wait_for_timeout(200)
+            await ev(pg, "() => { const f = document.querySelector('#hubBody .namefield'); f.value = 'A very long zoo name that goes on'; f.dispatchEvent(new Event('change')); }")
+            r = await ev(pg, "() => window.__wg.S.settings.zooName")
+            check(len(r) <= 22, f"zoo name is capped at 22 characters ({r!r})")
+            await ev(pg, "() => { const f = document.querySelector('#hubBody .namefield'); f.value = '  '; f.dispatchEvent(new Event('change')); }")
+            await pg.wait_for_timeout(400)
+            r = await ev(pg, "() => ({ hud: document.querySelector('#zooName').textContent, gate: ART.gateLabel })")
+            check(r['hud'] == 'Wildgrove' and r['gate'].upper() == 'WILDGROVE', f"a blank name falls back to Wildgrove ({r})")
+            await ev(pg, "() => { const f = document.querySelector('#hubBody .namefield'); f.value = 'Ørnereir Zoo'; f.dispatchEvent(new Event('change')); }")
+            await pg.wait_for_timeout(750)
+            async with pg.expect_download() as dl:
+                await pg.click('#hubBody button:has-text("Take a photo")')
+            d = await dl.value
+            path = await d.path()
+            size = os.path.getsize(path) if path else 0
+            head = open(path, 'rb').read(8) if path else b''
+            check(head == b'\x89PNG\r\n\x1a\n' and size > 20000, f"Take a photo downloads a PNG of the zoo ({d.suggested_filename}, {size // 1024} KB)")
+            check(d.suggested_filename not in ('-zoo.png', '--zoo.png') and d.suggested_filename.endswith('-zoo.png') and 'rnereir' in d.suggested_filename, f"photo filename keeps the zoo's name ({d.suggested_filename})")
+            check(await pg.is_hidden('#hub'), 'taking a photo closes the sheet so the zoo is in the picture')
+            await ev(pg, "() => { window.__wg.S.settings.zooName = ''; window.__wg.select(null); }")
+        await section('zoo name & photo', name_photo)
 
         # ---------------------------------------------------------------- art coverage
         async def art():
