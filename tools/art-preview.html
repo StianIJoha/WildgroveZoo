@@ -19,7 +19,7 @@ const NEWICONS = ['hay','fruit','meat','fish','seeds','insects','bamboo','water'
 const SECS = {
   animals: { w: 1200, h: SPECIES.length * 72 + 30 },
   decor: { w: 1200, h: 920 },
-  ui: { w: 1200, h: 840 },
+  ui: { w: 1200, h: 900 },
 };
 window.errors = [];
 function size() {
@@ -113,6 +113,23 @@ function drawAll(t) {
     safe(() => { ctx.translate(1010, y0 + 410); ART.wheel(ctx, 70, -t, segs.slice(0, 6)); }, 'wheel');
     safe(() => { ctx.translate(1010, y0 + 580); ART.wheel(ctx, 40, 0, segs.slice(0, 4).map((s) => ({color: s.color, label: s.label, icon: null}))); }, 'wheel');
     label(720, y0 + 650, 'wheel r=150 (8 segs), r=70, r=40 no icons');
+    // visitors: person() option combos, drawn at 1.6x (red cross = feet)
+    const PEOPLE = [
+      ['default', {}], ['dress', {dress: true, shirt: '#ff7aa2', hair: '#c46a2a'}], ['cap', {hat: 'cap', hatColor: '#ff5d73'}],
+      ['sun+dress', {hat: 'sun', hatColor: '#4cc3ff', dress: true, shirt: '#ffd23f', skin: '#c98a5a', hair: '#2a1a12'}],
+      ['beanie', {hat: 'beanie', hatColor: '#7ccf5a', shirt: '#a77bff'}], ['balloon', {balloon: '#ff5d73', shirt: '#5ec8c8'}],
+      ['moving flip', {moving: true, flip: true, hat: 'cap', hatColor: '#ffd23f', shirt: '#ff9f43'}],
+      ['kid', {kid: true, shirt: '#7ccf5a'}], ['kid balloon', {kid: true, balloon: '#4cc3ff', shirt: '#ff7aa2', dress: true}],
+      ['kid cap mv', {kid: true, moving: true, hat: 'cap', hatColor: '#4c8fd6', shirt: '#ffd23f'}],
+      ['kid beanie', {kid: true, hat: 'beanie', hatColor: '#ff7aa2', balloon: '#ffd23f', skin: '#8a5a3a', hair: '#1e1410'}],
+      ['kid sun', {kid: true, hat: 'sun', hatColor: '#ff5d73', dress: true, shirt: '#a77bff'}],
+      ['kid mv flip', {kid: true, moving: true, flip: true, balloon: '#7ccf5a', shirt: '#5aa9ff'}]];
+    PEOPLE.forEach(([nm, o], i) => {
+      const x = 40 + (i % 7) * 76, y = y0 + 610 + Math.floor(i / 7) * 120;
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.strokeRect(x - 22 * 1.6, y - 50 * 1.6, 44 * 1.6, 60 * 1.6);   // engine cache box
+      safe(() => { ctx.translate(x, y); ctx.scale(1.6, 1.6); ART.person(ctx, t + i * 0.3, o); }, 'person ' + nm);
+      cross(x, y); label(x, y + 26, nm);
+    });
     // 1x scene row
     y0 += SECS.ui.h;
   }
