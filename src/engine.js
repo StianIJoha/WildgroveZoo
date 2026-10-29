@@ -407,6 +407,11 @@ function spawnVisitor() {
   if (!nb4(GATE.x, GATE.y).some(([x, y]) => isPath(x, y))) return;
   const v = { gx: GATE.x + 0.5, gy: GATE.y + 0.5, cx: GATE.x, cy: GATE.y, px: -1, py: -1, tx: GATE.x, ty: GATE.y, route: null, dest: null,
     life: 50 + rnd() * 60, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0, wish: null, ox: (rnd() - 0.5) * 0.5, oy: (rnd() - 0.5) * 0.5 };
+  // look: kids, dresses and seasonal hats
+  const m = new Date().getMonth(), summer = m >= 5 && m <= 7, winter = m === 11 || m <= 1;
+  v.kid = rnd() < 0.25; v.dress = rnd() < 0.35;
+  const hr = rnd(); v.hat = hr < (summer ? 0.35 : 0.12) ? 'sun' : hr < (winter ? 0.5 : 0.24) ? (winter ? 'beanie' : 'cap') : null;
+  v.hatColor = pick(G.VISITOR_SHIRTS); if (v.kid) v.speed *= 1.15;
   if (S.tut < 0 && rnd() < 0.3) {
     v.wish = makeWish();
     if (!S.stats.wishHint) { S.stats.wishHint = 1; toast('A visitor has a wish! Tap their thought bubble to see it. Granting wishes earns tips.'); }
@@ -503,6 +508,7 @@ function arrive(v, d) {
   const o = d.obj; if (!o || !S.objects.includes(o)) return;
   if (o.kind === 'enc') { v.pause = 2 + rnd() * 3; if (encMood(o) > 0.7) v.heart = 1.6; }
   else v.pause = 1 + rnd() * 2;
+  if (o.kind === 'shop' && o.type === 'balloon' && v.kid && !v.balloon) v.balloon = pick(['#e4572e', '#f2b632', '#2e86ab', '#ef7aa0', '#8e5ea2']);
   // face the thing they came to see
   const cx = o.gx + o.w / 2 - v.gx, cy = o.gy + o.h / 2 - v.gy; if (Math.abs(cx - cy) > 0.05) v.flip = cx - cy < 0;
   if (wishMatches(v.wish, o)) grantWish(v);
@@ -1027,8 +1033,8 @@ function drawAnimal(e, a) {
 function drawVisitor(v, p) {
   const fade = Math.max(0, Math.min(1, v.life + 60 - v.age, v.age * 2));
   ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y);
-  const po = { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip };
-  if (ART.person && cam.z < LOD_ZOOM) { const ft = frameT(T + v.life, Math.PI / 5, v.moving); drawFrame(['p', v.shirt, v.skin, v.hair, v.flip, v.moving, ft].join(), BOX_PERSON, x => ART.person(x, ft, po)); }
+  const po = { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip, kid: v.kid, dress: v.dress, hat: v.hat, hatColor: v.hatColor, balloon: v.balloon || null };
+  if (ART.person && cam.z < LOD_ZOOM) { const ft = frameT(T + v.life, Math.PI / 5, v.moving); drawFrame(['p', v.shirt, v.skin, v.hair, v.flip, v.moving, v.kid, v.dress, v.hat, v.hatColor, v.balloon, ft].join(), BOX_PERSON, x => ART.person(x, ft, po)); }
   else if (ART.person) { try { ART.person(ctx, T + v.life, po); } catch (e) {} }
   if (v.heart > 0) { v.heart -= 1 / 60; ctx.save(); ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); drawIcon('heart', 0, 0, 12); ctx.restore(); }
   else if (v.sad > 0) { v.sad -= 1 / 60; ctx.globalAlpha = fade * Math.min(1, v.sad); ctx.font = '700 13px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(46,58,42,.7)'; ctx.lineWidth = 3; ctx.strokeText('☹', 0, -36); ctx.fillText('☹', 0, -36); }
