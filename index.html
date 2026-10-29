@@ -283,6 +283,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
     <div class="chip small"><span id="icoStar"></span><span id="stars">0</span><span class="lbl">stars</span></div>
     <button class="chip warnchip" id="lowFood" hidden title="Some animals will soon go hungry. Tap to buy food."></button>
     <div class="spacer"></div>
+    <button class="iconbtn" id="btnHelp" aria-label="Ask Tilda for a tip" title="Ask Tilda for a tip (H)">?</button>
     <button class="iconbtn" id="btnDay" aria-label="Time of day" hidden></button>
     <button class="iconbtn" id="btnZoomOut" aria-label="Zoom out">−</button>
     <button class="iconbtn" id="btnZoomIn" aria-label="Zoom in">+</button>
@@ -4395,7 +4396,7 @@ function loadState(s) {
   S = s; visitors = []; floaters = []; selected = null; tool = null;
   const ids = [...S.objects.flatMap(o => (o.animals || []).map(a => a.id)), ...S.storage.animals.map(a => a.id)];
   uid = Math.max(1, ...ids.filter(n => typeof n === 'number')) + 1000;
-  rebuild(); setTool(null); select(null); closeSheets(); $('#tutorial').dataset.step = '';
+  rebuild(); setTool(null); select(null); closeSheets(); tipOpen = false; $('#tutorial').dataset.step = ''; $('#tutSkip').textContent = 'Skip tutorial'; $('#tutOk').textContent = 'Let\'s go';
   if (S.cam) { cam.x = S.cam.x; cam.y = S.cam.y; cam.z = S.cam.z; clampCam(); } else centerCam();
   computeMeter(); updateHUD(); tutorialCheck(); save();
 }
@@ -5512,6 +5513,7 @@ function updateHUD() {
   if (low.length) { const key = low.join(); if (lf.dataset.k !== key) { lf.dataset.k = key; lf.innerHTML = `${ic(low[0], 18)}<span>Low ${low.slice(0, 2).map(f => FOODS[f].name.toLowerCase()).join(', ')}${low.length > 2 ? ` +${low.length - 2}` : ''}</span>`; } }
   const night = DK > 0.5, dc = $('#btnDay'); if (dc.dataset.n !== String(night) || !dc.firstChild) { dc.dataset.n = night; dc.innerHTML = ''; dc.appendChild(iconCanvas(night ? 'moon' : 'sun', 20, 'icon')); }
   dc.hidden = !S.settings.night || S.tut >= 0;
+  $('#btnHelp').hidden = S.tut >= 0;
   dc.title = `${night ? 'Night' : 'Day'} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night, and animals sleep.`;
   if (!$('#quests').hidden) renderQuests();
 }
@@ -6073,7 +6075,7 @@ function renderHub() {
     sr.appendChild(hbtn('mini', `${ic('save', 14)} Save code & backup`, () => openSaveModal()));
     sr.appendChild(hbtn('mini ghost', 'Start a new zoo', () => { $('#resetConfirm').hidden = false; }));
     ex.appendChild(sr);
-    ex.appendChild(el('p', 'hint', 'Keys: B build · P paths · C clear · S storage · G goals · Z zoo · +/− zoom · M sound · Ctrl+Z undo decor · Esc close'));
+    ex.appendChild(el('p', 'hint', 'Keys: H tips · B build · P paths · C clear · S storage · G goals · Z zoo · +/− zoom · M sound · Ctrl+Z undo decor · Esc close'));
     box.appendChild(ex);
   }
 }
@@ -6116,9 +6118,56 @@ function spin(free) {
 }
 
 // ---------- tutorial ----------
+// ---------- Tilda's advice (after the tutorial) ----------
+// looks at the zoo and returns the single most useful tip right now
+function advice() {
+  const encs = S.objects.filter(o => o.kind === 'enc' && !o.build), all = encs.flatMap(e => e.animals.map(a => [e, a]));
+  const sick = all.filter(([, a]) => a.sick).length;
+  if (sick && S.medicine < sick) return { mood: 'surprised', text: `${sick} animal${sick > 1 ? 's are' : ' is'} sick and you're short on medicine. Buy some in Build → Supplies, or hire the vet in the Zoo office.`, go: () => openShop('supplies') };
+  if (sick) return { mood: 'surprised', text: `${sick} animal${sick > 1 ? 's are' : ' is'} sick. Tap the red medicine bubble over the enclosure to treat ${sick > 1 ? 'them' : 'it'}. Sick animals are unhappy and won't breed.` };
+  const low = lowFoods(); if (low.length) return { mood: 'surprised', text: `You're nearly out of ${low.map(f => FOODS[f].name.toLowerCase()).join(' and ')}. Hungry animals get grumpy and can fall ill. "Restock everything" in Supplies tops it all up.`, go: () => openShop('supplies') };
+  const lonely = encs.find(e => e.animals.length && !e._conn); if (lonely) return { mood: 'happy', text: `Visitors can't reach your ${encLabel(lonely).toLowerCase()}. Lay a path from the gate that touches its fence, so it counts for visitors and wishes.`, go: () => select(lonely) };
+  const shopOff = S.objects.find(o => o.kind === 'shop' && !o.build && !o._conn); if (shopOff) return { mood: 'happy', text: `Your ${SHOPS[shopOff.type].name.toLowerCase()} isn't next to a path, so it earns nothing. Move it beside one.`, go: () => select(shopOff) };
+  const full = S.objects.filter(o => o.kind === 'shop' && o.prog >= 1).length; if (full) return { mood: 'wink', text: `${full} shop${full > 1 ? 's are' : ' is'} full. Tap the silver coin${full > 1 ? 's' : ''} to collect, or they stop earning.` };
+  const empty = encs.find(e => !e.animals.length);
+  if (empty) { const fit = S.storage.animals.filter(r => canHold(empty, r.species, r.variant)).length; return { mood: 'happy', text: fit ? `Your ${BIOMES[empty.biome].name.toLowerCase()} enclosure is empty, and ${fit} animal${fit > 1 ? 's' : ''} in storage would fit. Open it and use "Add from storage".` : `Your ${BIOMES[empty.biome].name.toLowerCase()} enclosure is empty. Adopt a male and a female so they can have babies.`, go: () => select(empty) }; }
+  const homeless = S.storage.animals.find(r => !r.baby && !encs.some(e => fitsBiome(e, r.species)));
+  if (homeless && S.level >= BIOMES[SPECIES[homeless.species].biome].lvl) return { mood: 'happy', text: `${homeless.name} the ${SPECIES[homeless.species].name.toLowerCase()} is waiting in storage. Build a ${BIOMES[SPECIES[homeless.species].biome].name.toLowerCase()} enclosure to give them a home.`, go: () => openShop('enc') };
+  const single = encs.find(e => { const ad = e.animals.filter(a => !a.baby); return ad.length && !(ad.some(a => a.sex === 'm') && ad.some(a => a.sex === 'f')); });
+  if (single) return { mood: 'wink', text: `The ${encLabel(single).toLowerCase()} needs a ${single.animals.some(a => a.sex === 'm') ? 'female' : 'male'} before any babies can arrive.`, go: () => select(single) };
+  const ready = (S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0);
+  if (ready) return { mood: 'wink', text: `You have ${ready} reward${ready > 1 ? 's' : ''} waiting in Goals. Go claim ${ready > 1 ? 'them' : 'it'}!`, go: () => $('#btnQuests').click() };
+  if (eventReady()) return { mood: 'wink', text: `A festival reward is ready to claim in the Zoo hub.`, go: () => openHub('event') };
+  const P = M.parts || {}, tips = {
+    mood: 'Animal mood is holding the Zoo meter back. Keep up with the need bubbles, or hire keepers in the Zoo office. Toys help too.',
+    clean: 'Tidiness is low. Clean dung, pick up litter, and put trash bins along busy paths: visitors near a bin drop far less.',
+    variety: 'Your zoo needs more variety. A new species, or a rarer subspecies from the lab or safari, lifts the meter.',
+    decor: 'Visitors would love more decoration. Trees, benches, flowers and fountains all add stars and lift the meter.',
+    babies: 'Babies make visitors happy! Keep a happy pair together and there\'s room in the enclosure, and a baby will follow.' };
+  const worst = Object.keys(tips).sort((a, b) => (P[a] || 0) - (P[b] || 0))[0];
+  if (M.meter < 85 && P[worst] < 0.75) return { mood: 'happy', text: `Zoo meter ${M.meter}%. ${tips[worst]}` };
+  const nx = EXPANSIONS[S.owned + 1]; if (nx && S.level >= nx.lvl && S.coins >= nx.cost) return { mood: 'wink', text: `You can afford more land! Expand in the Zoo office.`, go: () => openHub('office') };
+  const facts = Object.values(COLLECTIONS).flatMap(c => c.cards);
+  return { mood: 'happy', text: `Everything looks wonderful, director. Did you know? ${pick(facts)}` };
+}
+let tipOpen = false, tipGo = null;
+function showTip() {
+  if (S.tut >= 0) return;
+  select(null); closeSheets(); setTool(null);
+  const t = advice(); tipOpen = true; tipGo = t.go || null;
+  const box = $('#tutorial'); box.hidden = false; box.dataset.step = 'tip';
+  const pc = $('#guidePortrait'); pc.innerHTML = '';
+  const c = document.createElement('canvas'); const d = Math.min(2, devicePixelRatio || 1); c.width = 72 * d; c.height = 72 * d; c.style.width = '72px'; c.style.height = '72px'; const x = c.getContext('2d'); x.scale(d, d); x.translate(36, 36);
+  try { if (ART.guide) ART.guide(x, 72, 0, t.mood); } catch (e) {}
+  pc.appendChild(c);
+  $('#tutText').textContent = t.text; $('#tutStep').textContent = 'Tip';
+  $('#tutSkip').textContent = 'Close'; $('#tutOk').hidden = !tipGo; $('#tutOk').textContent = 'Show me';
+  sfx('pet');
+}
+function closeTip() { tipOpen = false; tipGo = null; $('#tutorial').hidden = true; $('#tutorial').dataset.step = ''; }
 function tutorialCheck() {
   const box = $('#tutorial');
-  if (S.tut < 0) { box.hidden = true; return; }
+  if (S.tut < 0) { box.hidden = !tipOpen; return; }
   const step = TUTORIAL[S.tut]; if (!step) { finishTutorial(); return; }
   const done = {
     caught: () => !S.escaped.length,
@@ -6226,7 +6275,7 @@ function hotkey(e) {
     const k = e.key.toLowerCase(), click = id => { e.preventDefault(); $(id).click(); };
     if (k === 'b') click('#btnShop'); else if (k === 'p') click('#btnPath'); else if (k === 'c' || k === 'x') click('#btnBulldoze');
     else if (k === 's') click('#btnStorage'); else if (k === 'g') click('#btnQuests'); else if (k === 'z') click('#btnHub');
-    else if (k === 'm') click('#btnSound'); else if (k === '+' || k === '=') click('#btnZoomIn'); else if (k === '-') click('#btnZoomOut');
+    else if (k === 'm') click('#btnSound'); else if (k === 'h' || k === '?') click('#btnHelp'); else if (k === '+' || k === '=') click('#btnZoomIn'); else if (k === '-') click('#btnZoomOut');
   }
 }
 // ---------- boot ----------
@@ -6243,8 +6292,9 @@ function wireUI() {
   $('#welcomeOk').onclick = () => $('#welcome').hidden = true;
   $('#rewardOk').onclick = () => $('#reward').hidden = true;
   $('#levelOk').onclick = () => $('#levelUp').hidden = true;
-  $('#tutSkip').onclick = skipTutorial;
-  $('#tutOk').onclick = () => finishTutorial();
+  $('#tutSkip').onclick = () => S.tut < 0 ? closeTip() : skipTutorial();
+  $('#tutOk').onclick = () => { if (S.tut >= 0) return finishTutorial(); const go = tipGo; closeTip(); if (go) go(); };
+  $('#btnHelp').onclick = () => tipOpen ? closeTip() : showTip();
   $('#btnSound').onclick = () => { S.settings.muted = !S.settings.muted; applySettings(); if (!muted) audioUnlock(); dirty(); };
   $('#meterChip').onclick = () => openHub('office');
   $('#btnZoomIn').onclick = () => { cam.z *= 1.2; clampCam(); };
@@ -6281,7 +6331,7 @@ const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
 window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
-  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, addXp, ensureEvent, eventPoints, claimEvent };
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, addXp, advice, showTip, ensureEvent, eventPoints, claimEvent };
 })();
 
 </script>
