@@ -6203,15 +6203,17 @@ function startMusic() {
   if (musicT || !AC) return;
   const chords = [[261.6, 329.6, 392], [220, 261.6, 329.6], [174.6, 220, 261.6], [196, 246.9, 293.7]];
   const pent = [523.3, 587.3, 659.3, 784, 880, 1046.5];
+  // night: vi–IV–I–V, slower, quieter, sparser melody
+  const nChords = [[220, 261.6, 329.6], [174.6, 220, 261.6], [261.6, 329.6, 392], [196, 246.9, 293.7]];
   let beat = 0, next = AC.currentTime + 0.1;
   musicT = setInterval(() => {
     if (!AC || muted || !musicOn || document.hidden) { next = AC ? AC.currentTime + 0.1 : 0; return; }
     while (next < AC.currentTime + 0.5) {
-      const bar = Math.floor(beat / 8) % 4, b = beat % 8, ch = chords[bar];
-      if (b === 0) ch.forEach(f => tone(f / 2, next, 1.6, 0.025, 'sine'));
-      if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03, 'triangle');
-      if (rnd() < 0.55) tone(pent[Math.floor(rnd() * pent.length)], next, 0.3, 0.022, 'triangle');
-      next += 0.28; beat++;
+      const night = DK > 0.5, bar = Math.floor(beat / 8) % 4, b = beat % 8, ch = (night ? nChords : chords)[bar], v = night ? 0.7 : 1;
+      if (b === 0) ch.forEach(f => tone(f / 2, next, night ? 2.4 : 1.6, 0.025 * v, 'sine'));
+      if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03 * v, night ? 'sine' : 'triangle');
+      if (rnd() < (night ? 0.3 : 0.55)) tone(pent[Math.floor(rnd() * pent.length)] / (night ? 2 : 1), next, night ? 0.6 : 0.3, 0.022 * v, night ? 'sine' : 'triangle');
+      next += night ? 0.4 : 0.28; beat++;
     }
   }, 120);
 }
