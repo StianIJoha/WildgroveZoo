@@ -892,6 +892,7 @@ function pushEnc(items, e) {
   for (let x = e.gx; x < e.gx + e.w; x++) { segs.push([x, e.gy, x + 1, e.gy]); segs.push([x, e.gy + e.h, x + 1, e.gy + e.h]); }
   for (let y = e.gy; y < e.gy + e.h; y++) { segs.push([e.gx, y, e.gx, y + 1]); segs.push([e.gx + e.w, y, e.gx + e.w, y + 1]); }
   for (const s of segs) items.push({ d: (s[0] + s[2]) / 2 + (s[1] + s[3]) / 2 + 0.01, f: () => drawFence(s, b, e) });
+  if (e.level > 0) items.push({ d: e.gx + e.gy + e.w + e.h - 0.2, f: () => { const p = iso(e.gx + e.w - 0.15, e.gy + e.h + 0.05); drawLevelSign(p.x, p.y, e.level, b); } });
   (e.toys || []).forEach((t, i) => { const lx = i ? e.w * 0.74 : e.w * 0.3, ly = i ? e.h * 0.3 : e.h * 0.66; items.push({ d: e.gx + lx + e.gy + ly, f: () => { const p = iso(e.gx + lx, e.gy + ly); drawToy(t, p.x, p.y); } }); });
   for (const pr of encProps(e)) items.push({ d: e.gx + pr.lx + e.gy + pr.ly, f: () => { const p = iso(e.gx + pr.lx, e.gy + pr.ly); drawProp(pr.t, p.x, p.y); } });
   if (!isMoving(e)) for (const a of e.animals) items.push({ d: e.gx + a.lx + e.gy + a.ly, f: () => drawAnimal(e, a) });
@@ -916,6 +917,16 @@ function encProps(e) {
   const kinds = { meadow: ['flowers', 'bush'], ice: ['ice', 'ice'], lagoon: ['reed', 'reed'], desert: ['cactus', 'rockS'], bamboo: ['bamboo', 'bamboo'], savanna: ['acacia', 'grassT'], coast: ['driftwood', 'rockS'] }[e.biome] || ['bush', 'bush'];
   e._props = [{ t: kinds[0], lx: 0.35 + r() * 0.3, ly: 0.35 + r() * 0.3 }, { t: kinds[1], lx: e.w - 0.4 - r() * 0.3, ly: e.h - 1.2 - r() * 0.2 }, { t: kinds[1], lx: 0.4 + r() * 0.3, ly: e.h * 0.45 + r() * 0.3 }];
   return e._props;
+}
+// little wooden sign on an upgraded enclosure's front corner: one star per upgrade level
+function drawLevelSign(x, y, lvl, b) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = b.fence; ctx.fillRect(-1.5, -20, 3, 20);
+  const w = 8 + lvl * 7;
+  ctx.fillStyle = '#c48d5c'; ctx.strokeStyle = '#7a5434'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-w / 2, -30, w, 11, 3) : ctx.rect(-w / 2, -30, w, 11); ctx.fill(); ctx.stroke();
+  for (let i = 0; i < lvl; i++) drawIcon('star', -w / 2 + 7.5 + i * 7, -24.5, 8);
+  ctx.restore();
 }
 function drawToy(t, x, y) {
   ctx.save(); ctx.translate(x, y);
