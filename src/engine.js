@@ -618,8 +618,8 @@ function frame(now) {
     const r0 = performance.now(); render(); const rt = performance.now() - r0;
     rEma = rEma * 0.95 + rt * 0.05; qT += dt;
     if (qT > 2.5) { qT = 0;
-      if (rEma > 18 && quality > 0.5) { quality = Math.max(0.5, quality - 0.25); resize(); spriteCache.clear(); iconCache.clear(); groundDirty = forestDirty = true; }
-      else if (quality < 1 && rEma * Math.pow((quality + 0.25) / quality, 2) < 12) { quality = Math.min(1, quality + 0.25); resize(); spriteCache.clear(); iconCache.clear(); groundDirty = forestDirty = true; } }
+      if (rEma > 18 && quality > 0.5) { quality = Math.max(0.5, quality - 0.25); resize(); spriteCache.clear(); iconCache.clear(); frameCache.clear(); groundDirty = forestDirty = true; }
+      else if (quality < 1 && rEma * Math.pow((quality + 0.25) / quality, 2) < 12) { quality = Math.min(1, quality + 0.25); resize(); spriteCache.clear(); iconCache.clear(); frameCache.clear(); groundDirty = forestDirty = true; } }
     uiT += dt; if (uiT > 0.3) { uiT = 0; updateHUD(); if (selected) renderPanel(); tutorialCheck(); if (!$('#storage').hidden) renderStorage(); if (!$('#hub').hidden) renderHub(); }
     saveT += dt; if (saveT > 8) { saveT = 0; save(); }
   } catch (e) { if (!frameErr) { frameErr = true; console.error(e); } }
@@ -905,6 +905,8 @@ function pushEnc(items, e) {
     if (sick) list.push({ icon: 'medicine', act: 'heal', n: sick, warn: true });
     for (const n of NEEDS) if (counts[n]) list.push({ icon: n === 'food' ? SPECIES[e.species].food : n, act: 'care', need: n, n: counts[n] });
     if (e.dung.length >= 2) list.push({ icon: 'broom', act: 'clean' });
+    // far out, one summary bubble per enclosure keeps the view readable; tapping it opens the panel
+    if (cam.z < 0.65 && list.length > 1) { const tot = list.reduce((n, it) => n + (it.n || 1), 0), first = list.find(it => it.warn) || list[0]; list.length = 0; list.push({ icon: first.icon, act: 'select', n: tot, warn: !!first.warn }); }
     list.forEach((it, i) => bubbles.push({ wx: p.x + (i - (list.length - 1) / 2) * 40, wy: p.y - 88, obj: e, ...it }));
   } });
 }
@@ -945,11 +947,26 @@ function drawFence(s, b, e) {
   for (const p of [a, c]) { ctx.fillStyle = b.fence; ctx.fillRect(p.x - 2, p.y - 17, 4, 17); ctx.fillStyle = sel ? '#fff' : b.rail; ctx.beginPath(); ctx.ellipse(p.x, p.y - 17, 2.4, 1.4, 0, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
+// zoomed out, animals and visitors are small and numerous, so they're drawn from cached animation frames:
+// 8 frames per walk cycle and one idle pose. Close up they're drawn live with every detail.
+const frameCache = new Map(), LOD_ZOOM = 0.8;
+const BOX_ANIMAL = { ox: 70, oy: 100, w: 140, h: 120 }, BOX_PERSON = { ox: 22, oy: 50, w: 44, h: 60 };
+function drawFrame(key, B, draw) {
+  const sc = scaleBucket(), k = key + '|' + sc; let c = frameCache.get(k);
+  if (!c) {
+    c = document.createElement('canvas'); c.width = Math.ceil(B.w * sc); c.height = Math.ceil(B.h * sc);
+    const x = c.getContext('2d'); x.setTransform(sc, 0, 0, sc, B.ox * sc, B.oy * sc); try { draw(x); } catch (e) {}
+    frameCache.set(k, c); if (frameCache.size > 600) frameCache.delete(frameCache.keys().next().value);
+  }
+  ctx.drawImage(c, -B.ox, -B.oy, B.w, B.h);
+}
+const frameT = (t, period, moving) => moving ? Math.floor(((t % period) + period) % period / period * 8) * period / 8 : 0.3;
 const topOf = a => (G.SPECIES_TOP[a.species] || 42) * (a.baby ? 0.65 : 1);
 function drawAnimal(e, a) {
   const p = iso(e.gx + a.lx, e.gy + a.ly), fn = ART.animals[a.species];
   ctx.save(); ctx.translate(p.x, p.y);
-  if (fn) { try { fn(ctx, T + a.phase, { baby: a.baby, flip: a.flip, moving: a.moving, sex: a.sex, variant: a.variant }); } catch (er) {} }
+  if (fn && cam.z < LOD_ZOOM) { const ft = frameT(T + a.phase, 0.7, a.moving); drawFrame([a.species, a.variant, a.baby, a.flip, a.moving, a.sex, ft].join(), BOX_ANIMAL, x => fn(x, ft, { baby: a.baby, flip: a.flip, moving: a.moving, sex: a.sex, variant: a.variant })); }
+  else if (fn) { try { fn(ctx, T + a.phase, { baby: a.baby, flip: a.flip, moving: a.moving, sex: a.sex, variant: a.variant }); } catch (er) {} }
   const top = -topOf(a);
   if (a.sick) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon('sick', 0, top - 6 + bob, 15); }
   else if (cam.z >= 0.6) { const n = activeNeeds(a); if (n.length) { const bob = Math.sin(T * 3 + a.phase) * 2; drawIcon(n[0] === 'food' ? SPECIES[a.species].food : n[0], 0, top - 6 + bob, 13); }
@@ -960,7 +977,9 @@ function drawAnimal(e, a) {
 function drawVisitor(v, p) {
   const fade = Math.max(0, Math.min(1, v.life + 60 - v.age, v.age * 2));
   ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y);
-  if (ART.person) { try { ART.person(ctx, T + v.life, { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip }); } catch (e) {} }
+  const po = { shirt: v.shirt, skin: v.skin, hair: v.hair, moving: v.moving, flip: v.flip };
+  if (ART.person && cam.z < LOD_ZOOM) { const ft = frameT(T + v.life, Math.PI / 5, v.moving); drawFrame(['p', v.shirt, v.skin, v.hair, v.flip, v.moving, ft].join(), BOX_PERSON, x => ART.person(x, ft, po)); }
+  else if (ART.person) { try { ART.person(ctx, T + v.life, po); } catch (e) {} }
   if (v.heart > 0) { v.heart -= 1 / 60; ctx.save(); ctx.translate(0, -34 - (1.6 - v.heart) * 10); ctx.globalAlpha = fade * Math.min(1, v.heart); drawIcon('heart', 0, 0, 12); ctx.restore(); }
   else if (v.sad > 0) { v.sad -= 1 / 60; ctx.globalAlpha = fade * Math.min(1, v.sad); ctx.font = '700 13px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(46,58,42,.7)'; ctx.lineWidth = 3; ctx.strokeText('☹', 0, -36); ctx.fillText('☹', 0, -36); }
   ctx.restore();
