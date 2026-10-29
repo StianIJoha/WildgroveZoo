@@ -91,6 +91,36 @@ const DECOR = {
   arch:     { name: 'Flower arch', lvl: 7, cost: 500, appeal: 5.5 },
 };
 DECOR.lamp.light = true; DECOR.bench.rest = true;
+// event-only decor: never sold in the Build menu, only won on the event track
+Object.assign(DECOR, {
+  blossomtree: { name: 'Blossom tree',  lvl: 1, cost: 0, appeal: 6, event: 'spring' },
+  parasol:     { name: 'Beach parasol', lvl: 1, cost: 0, appeal: 6, event: 'summer', rest: true },
+  pumpkins:    { name: 'Harvest pile',  lvl: 1, cost: 0, appeal: 6, event: 'autumn' },
+  snowman:     { name: 'Snowman',       lvl: 1, cost: 0, appeal: 6, event: 'winter' },
+});
+
+// weekly festival: the theme follows the season; points come from everyday play and fill a track of
+// milestones. Finishing the track starts a new lap with the same rewards. The track resets every Monday.
+const EVENTS = {
+  spring: { name: 'Blossom Festival', months: [2, 3, 4],  decor: 'blossomtree', star: 'bunny',   color: '#ef7aa0', blurb: 'Spring is here and the zoo is in bloom.' },
+  summer: { name: 'Beach Week',       months: [5, 6, 7],  decor: 'parasol',     star: 'seal',    color: '#3fa7b5', blurb: 'Sun, sand and splashing seals.' },
+  autumn: { name: 'Harvest Fair',     months: [8, 9, 10], decor: 'pumpkins',    star: 'redpanda', color: '#ef8a3c', blurb: 'Crunchy leaves, warm cider and pumpkins everywhere.' },
+  winter: { name: 'Winter Lights',    months: [11, 0, 1], decor: 'snowman',     star: 'penguin', color: '#5b8fd6', blurb: 'Twinkling lights and snowy penguins.' },
+};
+const EVENT_POINTS = { care: 1, litter: 1, dung: 1, shopCollects: 3, wishes: 4, babies: 8 };
+// reward 'decor' is the event's decor; 'star' is a rare (3rd-degree) animal of the event's star species
+const EVENT_TRACK = [
+  { at: 15,  reward: { coins: 200 } },
+  { at: 40,  reward: { paws: 3 } },
+  { at: 80,  reward: { food: 25, medicine: 2 } },
+  { at: 130, reward: { decor: 1 } },
+  { at: 200, reward: { coins: 600, gems: 1 } },
+  { at: 280, reward: { paws: 6, card: 1 } },
+  { at: 380, reward: { decor: 1, gems: 1 } },
+  { at: 500, reward: { coins: 1500, paws: 8 } },
+  { at: 650, reward: { gems: 3 } },
+  { at: 850, reward: { star: 1 } },
+];
 
 // enrichment toys placed inside an enclosure: each adds mood and makes the play need last longer
 const TOYS = {
@@ -203,12 +233,16 @@ const QUESTS = [
   { id: 'g5',  text: 'Place a trash bin by a path',        goal: 1,  prog: S => S.objects.filter(o => o.type === 'trashbin' && o._conn).length, reward: { coins: 60, xp: 10 } },
   { id: 'g6',  text: 'Build a lemonade stand',             goal: 1,  prog: S => S.objects.filter(o => o.type === 'lemonade' && !o.build).length, reward: { coins: 200, xp: 30 } },
   { id: 'g7',  text: 'Collect from shops 15 times',        goal: 15, prog: S => S.stats.shopCollects,              reward: { coins: 300, xp: 50, gems: 1 } },
+  { id: 'g7b', text: 'Grant 5 visitor wishes',             goal: 5,  prog: S => S.stats.wishes || 0,               reward: { coins: 250, xp: 40, paws: 2 } },
   { id: 'g8',  text: 'Welcome 3 baby animals',             goal: 3,  prog: S => S.stats.babies,                    reward: { coins: 300, xp: 60, gems: 2 } },
   { id: 'g9',  text: 'Reach a Zoo meter of 80%',           goal: 80, prog: S => S.stats.peakMeter,                 reward: { coins: 400, xp: 60, paws: 5 } },
   { id: 'g10', text: 'Reach level 5',                      goal: 5,  prog: S => S.level,                           reward: { coins: 500, gems: 2 } },
+  { id: 'g10b', text: 'Give an enclosure a toy',          goal: 1,  prog: S => S.objects.some(o => o.kind === 'enc' && o.toys && o.toys.length) ? 1 : 0, reward: { coins: 300, xp: 50, paws: 2 } },
+  { id: 'g10c', text: 'Finish all three daily tasks',     goal: 1,  prog: S => S.tasks && S.tasks.bonus ? 1 : (S.stats.taskBonus || 0), reward: { coins: 400, xp: 60, gems: 1 } },
   { id: 'g11', text: 'Build the animal nursery',           goal: 1,  prog: S => S.objects.filter(o => o.type === 'nursery' && !o.build).length, reward: { coins: 500, xp: 80 } },
   { id: 'g12', text: 'Keep 5 different species',           goal: 5,  prog: (S, Z) => Z.speciesCount(),             reward: { coins: 800, xp: 120, gems: 2 } },
   { id: 'g13', text: 'Complete a collection',              goal: 1,  prog: S => S.stats.collections,               reward: { coins: 600, xp: 100, gems: 2 } },
+  { id: 'g13b', text: 'Keep a pair of seals on the coast', goal: 2, prog: (S, Z) => Z.pairCount('seal'),          reward: { coins: 900, xp: 140, gems: 2 } },
   { id: 'g14', text: 'Send a safari expedition',           goal: 1,  prog: S => S.stats.safaris,                   reward: { coins: 600, xp: 100 } },
   { id: 'g15', text: 'Have 40 visitors at once',           goal: 40, prog: S => S.stats.peakVisitors,              reward: { coins: 1000, xp: 150, gems: 2 } },
   { id: 'g16', text: 'Breed a rarer subspecies in the lab', goal: 1, prog: S => S.stats.labUp,                     reward: { coins: 1500, xp: 200, gems: 3 } },
@@ -254,5 +288,5 @@ const VISITOR_SKINS = ['#f6d3b3', '#e8b48f', '#c98e64', '#9a6644', '#6e4630'];
 const VISITOR_HAIRS = ['#2b1d14', '#5a3a22', '#c78a3b', '#1d1d1d', '#8a4b2a', '#e0c070'];
 const NAMES = ['Pip', 'Mochi', 'Biscuit', 'Juniper', 'Pebble', 'Clover', 'Nori', 'Waffle', 'Hazel', 'Tofu', 'Maple', 'Ziggy', 'Olive', 'Pickles', 'Rumi', 'Saffron', 'Bean', 'Kiwi', 'Marlo', 'Fig', 'Sunny', 'Bramble', 'Poppy', 'Taro', 'Luna', 'Otis', 'Willow', 'Nugget', 'Cosmo', 'Dot', 'Honey', 'Basil', 'Jasper', 'Mabel', 'Gus', 'Ivy', 'Peanut', 'Ruby', 'Sprout', 'Theo', 'Frida', 'Odin', 'Sigrid', 'Bjørn', 'Tuva'];
 
-return { BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
+return { EVENTS, EVENT_POINTS, EVENT_TRACK, BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
 })();

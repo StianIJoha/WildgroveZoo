@@ -314,7 +314,8 @@ function computeMeter() {
   const parts = {
     mood: n ? moodSum / n : 0.5,
     clean: encN ? 0.5 * (encClean / encN) + 0.5 * pathClean : pathClean,
-    variety: Math.min(1, kinds.size / 8),
+    // variety is judged against what you could have by now, so early zoos aren't stuck below 70%
+    variety: Math.min(1, kinds.size / Math.min(8, 2 + Math.floor(S.level * 0.6))),
     decor: Math.min(1, decor / (8 + 3 * encs.length)),
     babies: Math.min(1, babies / 3),
   };
@@ -375,7 +376,10 @@ function spawnVisitor() {
   if (!nb4(GATE.x, GATE.y).some(([x, y]) => isPath(x, y))) return;
   const v = { gx: GATE.x + 0.5, gy: GATE.y + 0.5, cx: GATE.x, cy: GATE.y, px: -1, py: -1, tx: GATE.x, ty: GATE.y, route: null, dest: null,
     life: 50 + rnd() * 60, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0, wish: null };
-  if (S.tut < 0 && rnd() < 0.3) v.wish = makeWish();
+  if (S.tut < 0 && rnd() < 0.3) {
+    v.wish = makeWish();
+    if (!S.stats.wishHint) { S.stats.wishHint = 1; toast('A visitor has a wish! Tap their thought bubble to see it. Granting wishes earns tips.'); }
+  }
   visitors.push(v);
   const tp = ticketPrice(); addCoins(tp, true); S.stats.visitorsIn++;
   const p = iso(GATE.x + 0.5, GATE.y + 0.5); floaters.push({ wx: p.x, wy: p.y - 70, text: '+' + tp, t: 0, color: '#f2b632' });
@@ -856,7 +860,7 @@ function drawObj(o, c) {
   }
   if (selected === o) { ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; diamond(ctx, c.x, c.y, o.w * TW / 2 - 2, o.h * TH / 2 - 1); ctx.stroke(); ctx.restore(); }
 }
-const fmtTime = s => { s = Math.max(0, Math.ceil(s)); if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'; if (s >= 60) return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; return s + 's'; };
+const fmtTime = s => { s = Math.max(0, Math.ceil(s)); if (s >= 86400) return Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h'; if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'; if (s >= 60) return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; return s + 's'; };
 function pushEnc(items, e) {
   const b = BIOMES[e.biome];
   if (e.build) {
@@ -1082,7 +1086,7 @@ function updateHUD() {
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
   if (S.tut < 0) ensureTasks();
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
-  const hubN = S.tut >= 0 ? 0 : (Date.now() >= S.wheelNext ? 1 : 0) + Object.keys(COLLECTIONS).filter(b => collComplete(b) && !S.collectionsDone.includes(b)).length;
+  const hubN = S.tut >= 0 ? 0 : (Date.now() >= S.wheelNext ? 1 : 0) + Object.keys(COLLECTIONS).filter(b => collComplete(b) && !S.collectionsDone.includes(b)).length + (eventReady() ? 1 : 0);
   $('#hubBadge').hidden = !hubN; $('#hubBadge').textContent = hubN;
   const storeN = S.storage.animals.length + S.storage.items.length; $('#storeBadge').hidden = !storeN; $('#storeBadge').textContent = storeN;
   const low = S.tut < 0 ? lowFoods() : [], lf = $('#lowFood');
@@ -1378,7 +1382,7 @@ function renderShop() {
   const entries = shopTab === 'enc' ? Object.entries(BIOMES).map(([id, b]) => ({ id, kind: 'enc', name: b.name + ' enclosure', lvl: b.lvl, cost: b.cost, note: 'Home of ' + Object.values(SPECIES).filter(s => s.biome === id).map(s => s.name.toLowerCase()).slice(0, 3).join(', '), t: { kind: 'enc', biome: id } }))
     : shopTab === 'shop' ? Object.entries(SHOPS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: `${fmt(d.pay)} coins · about ${fmtTime(d.period / ((0.5 + M.meter / 100) * (0.25 + 0.75 * Math.min(1, visitors.length / 12))))} now`, t: { kind: 'shop', type: id } }))
     : shopTab === 'bld' ? Object.entries(BUILDINGS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.desc, t: { kind: 'bld', type: id }, unique: true }))
-    : Object.entries(DECOR).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.bin ? 'Less litter nearby' : `+${d.appeal} stars`, t: { kind: 'deco', type: id } }));
+    : Object.entries(DECOR).filter(([, d]) => !d.event).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.bin ? 'Less litter nearby' : `+${d.appeal} stars`, t: { kind: 'deco', type: id } }));
   for (const e of entries) {
     const have = e.unique && S.objects.some(o => o.type === e.id);
     const locked = S.level < e.lvl;
@@ -1494,7 +1498,7 @@ function renderTasks(box) {
   if (S.tasks.list.length) {
     const bonus = el('div', 'quest bonus' + (S.tasks.bonus ? ' claimed' : allTasksDone() ? ' done' : ''));
     bonus.innerHTML = `<div class="qt">${S.tasks.bonus ? '✓ ' : ''}Finish all three tasks</div><div class="qr">${priceTag({ gems: 2 })} <span class="pt">+ a collection card</span></div>`;
-    if (allTasksDone() && !S.tasks.bonus) { const b = el('button', 'btn gold', 'Claim bonus'); b.onclick = () => { if (S.tasks.bonus) return; S.tasks.bonus = true; const parts = grant({ gems: 2, card: 1 }); showReward('Daily bonus', parts); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; bonus.appendChild(b); }
+    if (allTasksDone() && !S.tasks.bonus) { const b = el('button', 'btn gold', 'Claim bonus'); b.onclick = () => { if (S.tasks.bonus) return; S.tasks.bonus = true; S.stats.taskBonus = 1; const parts = grant({ gems: 2, card: 1 }); showReward('Daily bonus', parts); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; bonus.appendChild(b); }
     box.appendChild(bonus);
   }
   box.appendChild(el('div', 'taskhead', '<b>Director\'s goals</b>'));
@@ -1515,17 +1519,66 @@ function renderQuests(force) {
   }
 }
 
+// ---------- seasonal event ----------
+function weekStart(now) { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.getTime(); }
+function ensureEvent() {
+  if (S.tut >= 0) return null;
+  const m = new Date().getMonth(), id = Object.keys(G.EVENTS).find(k => G.EVENTS[k].months.includes(m)), wk = weekStart(Date.now());
+  if (!S.event || S.event.id !== id || S.event.week !== wk) {
+    const base = {}; for (const k in G.EVENT_POINTS) base[k] = S.stats[k] || 0;
+    S.event = { id, week: wk, base, lap: 1, claimed: 0, spent: 0 };
+  }
+  return S.event;
+}
+function eventPoints() { const E = S.event; let p = 0; for (const k in G.EVENT_POINTS) p += G.EVENT_POINTS[k] * Math.max(0, (S.stats[k] || 0) - (E.base[k] || 0)); return p - E.spent; }
+const eventEnds = () => S.event.week + 7 * 86400000;
+function eventReady() { if (!ensureEvent()) return 0; const p = eventPoints(); let n = 0; for (let i = S.event.claimed; i < G.EVENT_TRACK.length && p >= G.EVENT_TRACK[i].at; i++) n++; return n; }
+function rewardText(r, ev) { const out = []; if (r.coins) out.push(`${fmt(r.coins)} coins`); if (r.gems) out.push(`${r.gems} gem${r.gems > 1 ? 's' : ''}`); if (r.paws) out.push(`${r.paws} paws`); if (r.food) out.push(`${r.food} food`); if (r.medicine) out.push(`${r.medicine} medicine`); if (r.card) out.push('a card'); if (r.decor) out.push(DECOR[ev.decor].name); if (r.star) out.push(`a rare ${SPECIES[ev.star].name.toLowerCase()}`); return out.join(' + '); }
+function claimEvent() {
+  const E = S.event, ev = G.EVENTS[E.id], m = G.EVENT_TRACK[E.claimed];
+  if (!m || eventPoints() < m.at) return;
+  const r = Object.assign({}, m.reward), parts = [];
+  if (r.decor) { S.storage.items.push({ kind: 'deco', type: ev.decor, w: 1, h: 1 }); parts.push(`a ${DECOR[ev.decor].name.toLowerCase()} (in storage)`); delete r.decor; }
+  if (r.star) { const a = storeRec(ev.star, 2, rnd() < 0.5 ? 'm' : 'f', false); S.storage.animals.push(a); parts.push(`${a.name} the ${VNAME(ev.star, 2)} (in storage)`); delete r.star; }
+  parts.push(...grant(r));
+  E.claimed++;
+  if (E.claimed >= G.EVENT_TRACK.length) { E.spent += G.EVENT_TRACK[G.EVENT_TRACK.length - 1].at; E.claimed = 0; E.lap++; parts.push(`Lap ${E.lap} begins!`); }
+  sfx('level'); showReward(`${ev.name} reward`, parts); dirty();
+}
+function renderEvent(box) {
+  const E = ensureEvent(); if (!E) { box.appendChild(el('p', 'empty', 'Finish the tutorial to join the festival.')); return; }
+  const ev = G.EVENTS[E.id], p = eventPoints(), T2 = G.EVENT_TRACK, top = T2[T2.length - 1].at;
+  const head = el('div', 'evhead'); head.style.setProperty('--ev', ev.color);
+  head.appendChild(iconCanvas(ev.decor, 64, 'decor'));
+  head.appendChild(el('div', '', `<div class="eyebrow">Weekly festival · lap ${E.lap}</div><h3>${ev.name}</h3><div class="sub">${ev.blurb} Ends in ${fmtTime((eventEnds() - Date.now()) / 1000)}.</div>`));
+  box.appendChild(head);
+  box.appendChild(el('div', 'evbar', `<i><b style="width:${Math.min(100, p / top * 100)}%;background:${ev.color}"></b></i><span><b>${fmt(p)}</b> / ${fmt(top)} festival points</span>`));
+  const list = el('div', 'evtrack');
+  T2.forEach((m, i) => {
+    const got = i < E.claimed, ready = !got && p >= m.at, next = i === E.claimed;
+    const row = el('div', 'evstep' + (got ? ' got' : ready ? ' ready' : ''));
+    row.innerHTML = `<span class="evat">${m.at}</span><span class="evrw">${m.reward.decor || m.reward.star ? '<b>' : ''}${rewardText(m.reward, ev)}${m.reward.decor || m.reward.star ? '</b>' : ''}</span>`;
+    if (got) row.appendChild(el('span', 'evok', '✓'));
+    else if (ready && next) row.appendChild(hbtn('mini gold', 'Claim', claimEvent));
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+  const names = { care: 'caring for an animal', litter: 'picking up litter', dung: 'cleaning dung', shopCollects: 'collecting from a shop', wishes: 'granting a visitor wish', babies: 'a baby being born' };
+  box.appendChild(el('p', 'hint', 'Earn points by ' + Object.entries(G.EVENT_POINTS).map(([k, n]) => `${names[k]} (${n})`).join(', ') + '. Finish the track to start another lap.'));
+}
+
 // ---------- hub: wheel / collections / office ----------
-let hubTab = 'wheel', hubSig = '';
+let hubTab = 'event', hubSig = '';
 function openHub(tab) { hubTab = tab || hubTab; closeSheets(); select(null); $('#hub').hidden = false; document.body.classList.add('sheet-open'); hubSig = ''; renderHub(); }
 function collComplete(b) { return S.cards[b].every(c => c > 0); }
 function renderHub() {
-  const sig = [hubTab, Date.now() >= S.wheelNext, Math.floor((S.wheelNext - Date.now()) / 60000), JSON.stringify(S.cards), S.collectionsDone.length, S.gems, S.owned, JSON.stringify(S.helpers.food > S.clock), Math.floor(S.clock / 30), spinning].join('|');
+  const sig = [hubTab, S.event && eventPoints(), S.event && S.event.claimed, Date.now() >= S.wheelNext, Math.floor((S.wheelNext - Date.now()) / 60000), JSON.stringify(S.cards), S.collectionsDone.length, S.gems, S.owned, JSON.stringify(S.helpers.food > S.clock), Math.floor(S.clock / 30), spinning].join('|');
   if (sig === hubSig) return; hubSig = sig;
   const tabs = $('#hubTabs'); tabs.innerHTML = '';
-  for (const [k, l] of [['wheel', 'Wheel'], ['coll', 'Collections'], ['office', 'Zoo office']]) { const b = el('button', 'tab' + (k === hubTab ? ' on' : ''), l); b.onclick = () => { hubTab = k; renderHub(); }; tabs.appendChild(b); }
+  for (const [k, l] of [['event', 'Festival'], ['wheel', 'Wheel'], ['coll', 'Collections'], ['office', 'Zoo office']]) { const b = el('button', 'tab' + (k === hubTab ? ' on' : ''), l); b.onclick = () => { hubTab = k; renderHub(); }; tabs.appendChild(b); }
   const box = $('#hubBody'); box.innerHTML = '';
-  if (hubTab === 'wheel') {
+  if (hubTab === 'event') renderEvent(box);
+  else if (hubTab === 'wheel') {
     const free = Date.now() >= S.wheelNext;
     const wrap = el('div', 'wheelwrap'); const c = document.createElement('canvas'); c.id = 'wheelCanvas'; const d = Math.min(2, devicePixelRatio || 1); c.width = 260 * d; c.height = 260 * d; c.style.width = '260px'; c.style.height = '260px'; wrap.appendChild(c); box.appendChild(wrap);
     drawWheel();
@@ -1791,5 +1844,5 @@ const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
 window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
-  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; } };
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, ensureEvent, eventPoints, claimEvent };
 })();

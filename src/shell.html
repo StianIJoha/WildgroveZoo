@@ -213,11 +213,35 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
 .filebtn { cursor: pointer; }
 .savemsg { font-size: 12.5px; font-weight: 800; color: var(--leaf-deep); margin: 8px 0 0; min-height: 1em; }
 .restock { background: #fff8e3; box-shadow: inset 0 0 0 1.5px #f0d590; }
+.evhead { display: flex; gap: 12px; align-items: center; background: linear-gradient(120deg, color-mix(in srgb, var(--ev) 18%, #fff), #fff); border-radius: 16px; padding: 10px 12px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ev) 40%, transparent); }
+.evhead canvas { flex: none; }
+.evhead h3 { margin: 2px 0 2px; font-size: 20px; }
+.evbar { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.evbar i { flex: 1; height: 12px; border-radius: 7px; background: var(--paper-2); overflow: hidden; display: block; }
+.evbar b { display: block; height: 100%; border-radius: 7px; transition: width .4s; }
+.evbar span { white-space: nowrap; }
+.evbar span b { color: var(--ink); }
+.evtrack { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.evstep { display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 12px; padding: 6px 8px; box-shadow: inset 0 0 0 1px var(--line); font-size: 12.5px; font-weight: 700; min-height: 40px; }
+.evstep.got { opacity: .5; }
+.evstep.ready { box-shadow: inset 0 0 0 2px var(--sun); background: #fff8e3; }
+.evat { flex: none; min-width: 38px; text-align: center; background: var(--paper-2); border-radius: 8px; padding: 2px 4px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.evrw { flex: 1; min-width: 0; }
+.evok { color: var(--leaf); font-weight: 900; }
 .toolhint #toolUndo { background: rgba(255,255,255,.08); }
 
 @media (max-width: 680px) {
   .brand { display: none; }
-  .xp, .meter { width: 58px; }
+  .hud { gap: 6px; }
+  .xp, .meter { width: 54px; }
+  .xp span { display: none; }
+  .chip.level { padding: 4px 10px 4px 4px; }
+  #meterChip .meter { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 6px; width: 92px; }
+  #meterChip .meterlbl { grid-column: 1 / -1; font-size: 9px; }
+  #meterChip .meter span#metertext { margin: 0; font-size: 11px; font-weight: 800; color: var(--ink); }
+  #btnZoomOut, #btnZoomIn { display: none; }
+  .warnchip span { display: none; }
+  .toast { top: 104px; }
   .chip.small { display: none; }
   .chip { font-size: 14px; padding-right: 9px; }
   .tool { min-width: 0; width: 52px; font-size: 10.5px; padding: 6px 2px 5px; }
