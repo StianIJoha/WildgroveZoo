@@ -232,6 +232,7 @@ const activeNeeds = a => NEEDS.filter(n => needActive(a, n));
 function mood(e, a) {
   let m = 1 - 0.2 * activeNeeds(a).length - (a.sick ? 0.4 : 0) - 0.15 * (e.dung.length / 6) + G.TOY_MOOD * (e.toys ? e.toys.length : 0);
   if (SPECIES[a.species].biome === e.biome) m += 0.1;
+  if (WX === 'snow' && e.biome === 'ice') m += 0.1;
   return Math.max(0, Math.min(1, m));
 }
 function encMood(e) { if (!e.animals.length) return 1; let s = 0; for (const a of e.animals) s += mood(e, a); return s / e.animals.length; }
@@ -323,6 +324,46 @@ function darkness() {
   const p = dayPhase(), ease = k => k * k * (3 - 2 * k);
   if (p < 0.6) return 0; if (p < 0.68) return ease((p - 0.6) / 0.08); if (p < 0.92) return 1; return ease(1 - (p - 0.92) / 0.08);
 }
+// ---------- weather ----------
+// now and then a shower (snow in winter months) rolls in for a few minutes. Rain keeps visitors away
+// but fills every water trough; ice-floe animals love the snow.
+let WX = null, wxT = 0;
+const weatherOn = () => S.settings.weather !== false && S.tut < 0;
+function tickWeather(dt) {
+  if (!weatherOn()) { WX = null; return; }
+  const w = S.weather;
+  if (w && S.clock < w.until) { WX = w.kind; if (WX === 'rain') { wxT += dt; if (wxT > 3) { wxT = 0; for (const e of S.objects) if (e.kind === 'enc' && !e.build) for (const a of e.animals) if (needActive(a, 'water')) fulfill(e, a, 'water', true); } } return; }
+  if (w && w.kind) { S.weather = { kind: null, until: S.clock + 240 + rnd() * 420 }; WX = null; return; } // a dry spell after every shower
+  if (w && S.clock < w.until) return;
+  WX = null;
+  if (rnd() < dt / 90) { // roughly one roll a minute and a half once the dry spell is over
+    const m = new Date().getMonth(), kind = (m === 11 || m <= 1) && rnd() < 0.6 ? 'snow' : 'rain';
+    S.weather = { kind, until: S.clock + 100 + rnd() * 140 }; WX = kind;
+    toast(kind === 'rain' ? 'A rain shower! Fewer visitors for a while, but the rain fills every water trough.' : 'It\'s snowing! The ice-floe animals are thrilled.');
+  }
+}
+let drops = [];
+const reducedMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+function drawWeather() {
+  if (!WX) { drops.length = 0; return; }
+  if (drops.kind !== WX) { drops = []; drops.kind = WX; }
+  if (reducedMotion) { if (WX === 'rain') { ctx.fillStyle = 'rgba(40,60,90,0.12)'; ctx.fillRect(0, 0, W, H); } return; }
+  const snow = WX === 'snow', want = Math.min(260, Math.round(W * H / (snow ? 5200 : 3200)));
+  while (drops.length < want) drops.push({ x: rnd() * W, y: rnd() * H, v: snow ? 30 + rnd() * 40 : 520 + rnd() * 260, r: snow ? 1.2 + rnd() * 2 : 0, ph: rnd() * 6 });
+  ctx.save();
+  if (!snow) { ctx.fillStyle = 'rgba(40,60,90,0.12)'; ctx.fillRect(0, 0, W, H); }
+  ctx.strokeStyle = 'rgba(210,225,255,0.55)'; ctx.lineWidth = 1.2; ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  const dt = 1 / 60;
+  ctx.beginPath();
+  for (const d of drops) {
+    d.y += d.v * dt; d.x += snow ? Math.sin(T + d.ph) * 0.4 : -d.v * 0.18 * dt;
+    if (d.y > H + 10) { d.y = -10; d.x = rnd() * W * 1.1; }
+    if (snow) { ctx.moveTo(d.x + d.r, d.y); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); } else { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 2.6, d.y - 13); }
+  }
+  if (snow) ctx.fill(); else ctx.stroke();
+  ctx.restore();
+}
+
 function timeToChange() { const p = dayPhase(); const nextAt = p < 0.6 ? 0.6 : p < 0.92 ? 0.92 : 1.6; return (nextAt - p) * G.DAY_LENGTH; }
 
 // ---------- zoo meter / attraction ----------
@@ -667,7 +708,7 @@ function frame(now) {
   } catch (e) { if (!frameErr) { frameErr = true; console.error(e); } }
 }
 function tick(dt) {
-  S.clock += dt; DK = darkness();
+  S.clock += dt; DK = darkness(); tickWeather(dt);
   meterT -= dt; if (meterT <= 0) { meterT = 0.5; computeMeter(); }
   for (const o of S.objects) {
     tickBuild(o);
@@ -678,7 +719,7 @@ function tick(dt) {
   tickHelpers(dt);
   for (const p of S.escaped) stepEscaped(p, dt);
   spawnT -= dt;
-  const vt = Math.round(M.target * (1 - 0.45 * DK));
+  const vt = Math.round(M.target * (1 - 0.45 * DK) * (WX === 'rain' ? 0.7 : 1));
   if (visitors.length < vt && spawnT <= 0) { spawnVisitor(); const base = Math.min(1.7, 60 / Math.max(1, vt)); spawnT = base * (0.7 + rnd() * 0.6) * (visitors.length < vt * 0.7 ? 0.5 : 1); }
   for (const v of visitors) stepVisitor(v, dt);
   visitors = visitors.filter(v => !v.gone && v.age < v.life + 60);
@@ -879,6 +920,8 @@ function render() {
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(46,58,42,0.8)'; ctx.strokeText(f.text, f.wx, f.wy - f.t * 28); ctx.fillStyle = f.color; ctx.fillText(f.text, f.wx, f.wy - f.t * 28); ctx.restore();
   }
   ctx.restore();
+  drawWeather();
+  drawConfetti();
 }
 function drawNight(dk, on) {
   const a = toWorld(0, 0), b = toWorld(W, H);
@@ -901,7 +944,6 @@ function drawNight(dk, on) {
     if (k > 0.25) { ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
   }
   ctx.restore();
-  drawConfetti();
 }
 let confetti = [];
 function burst() {
@@ -1244,7 +1286,7 @@ function updateHUD() {
   const night = DK > 0.5, dc = $('#btnDay'); if (dc.dataset.n !== String(night) || !dc.firstChild) { dc.dataset.n = night; dc.innerHTML = ''; dc.appendChild(iconCanvas(night ? 'moon' : 'sun', 20, 'icon')); }
   dc.hidden = !S.settings.night || S.tut >= 0;
   $('#btnHelp').hidden = S.tut >= 0;
-  dc.title = `${night ? 'Night' : 'Day'} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night, and animals sleep.`;
+  dc.title = `${night ? 'Night' : 'Day'}${WX ? (WX === 'rain' ? ', raining' : ', snowing') : ''} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night or in the rain, and animals sleep at night.`;
   if (!$('#quests').hidden) renderQuests();
 }
 
@@ -1811,6 +1853,7 @@ function renderHub() {
     const rr = el('div', 'row wrap');
     rr.appendChild(hbtn('mini' + (st.muted ? ' ghost' : ' on'), `Sound ${st.muted ? 'off' : 'on'}`, () => { st.muted = !st.muted; applySettings(); if (!muted) audioUnlock(); }));
     rr.appendChild(hbtn('mini' + (st.music === false ? ' ghost' : ' on'), `Music ${st.music === false ? 'off' : 'on'}`, () => { st.music = st.music === false; applySettings(); }));
+    rr.appendChild(hbtn('mini' + (st.weather !== false ? ' on' : ' ghost'), `Weather ${st.weather !== false ? 'on' : 'off'}`, () => { st.weather = st.weather === false; }));
     rr.appendChild(hbtn('mini' + (st.night ? ' on' : ' ghost'), `Day & night ${st.night ? 'on' : 'off'}`, () => { st.night = !st.night; }));
     ex.appendChild(rr);
     const sr = el('div', 'row wrap');
@@ -2002,6 +2045,15 @@ function voice(sp, baby) {
     o.connect(g).connect(master); o.start(t0); o.stop(t0 + len + 0.02);
   }
 }
+let rainNode = null;
+function rainSound() {
+  const want = AC && !muted && musicOn && WX === 'rain' && !document.hidden;
+  if (want && !rainNode) {
+    const len = AC.sampleRate * 2, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400; const g = AC.createGain(); g.gain.value = 0.0001;
+    src.connect(f).connect(g).connect(master); src.start(); g.gain.exponentialRampToValueAtTime(0.025, AC.currentTime + 2); rainNode = { src, g };
+  } else if (!want && rainNode) { const r = rainNode; rainNode = null; r.g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + 1.5); r.src.stop(AC.currentTime + 1.6); }
+}
 function ambience(night, t0) {
   const chirp = (f0, f1, t, len, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g).connect(master); o.start(t); o.stop(t + len + 0.02); };
   if (night) { const f = 4200 + rnd() * 600; for (let i = 0; i < 6; i++) chirp(f, f * 1.02, t0 + i * 0.055, 0.035, 0.006); }
@@ -2022,6 +2074,7 @@ function startMusic() {
       if (b === 0) ch.forEach(f => tone(f / 2, next, night ? 2.4 : 1.6, 0.025 * v, 'sine'));
       if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03 * v, night ? 'sine' : 'triangle');
       if (rnd() < (night ? 0.3 : 0.55)) tone(pent[Math.floor(rnd() * pent.length)] / (night ? 2 : 1), next, night ? 0.6 : 0.3, 0.022 * v, night ? 'sine' : 'triangle');
+      rainSound();
       // ambience: a bird now and then by day, cricket trills at night
       if (rnd() < (night ? 0.06 : 0.03)) ambience(night, next + rnd() * 0.2);
       next += night ? 0.4 : 0.28; beat++;
@@ -2093,5 +2146,5 @@ const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
 window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
-  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, addXp, advice, showTip, ensureEvent, eventPoints, claimEvent };
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, get WX() { return WX; }, addXp, advice, showTip, ensureEvent, eventPoints, claimEvent };
 })();
