@@ -1560,15 +1560,23 @@ function renderSupplies(grid) {
 function buyFood(k, n) { const c = n === 50 ? Math.round(FOODS[k].price * 50 * 0.9) : FOODS[k].price * n; if (pay({ coins: c })) { S.food[k] += n; sfx('coin'); renderShop(); dirty(); } }
 
 // ---------- storage ----------
-let storageTab = 'animals', placeFor = null;
+let storageTab = 'animals', placeFor = null, storeFilter = null;
 function renderStorage() {
-  const box = $('#storageBody'); const sig = [storageTab, placeFor, S.storage.animals.map(a => a.id).join(), S.storage.items.length, JSON.stringify(S.food), S.medicine].join('|');
+  const box = $('#storageBody'); const sig = [storageTab, placeFor, storeFilter, S.storage.animals.map(a => a.id).join(), S.storage.items.length, JSON.stringify(S.food), S.medicine].join('|');
   if (box.dataset.sig === sig) return; box.dataset.sig = sig; box.innerHTML = '';
   const tabs = $('#storageTabs'); tabs.innerHTML = '';
   for (const [k, l] of [['animals', `Animals (${S.storage.animals.length})`], ['items', `Items (${S.storage.items.length})`], ['stock', 'Food & medicine']]) { const b = el('button', 'tab' + (k === storageTab ? ' on' : ''), l); b.onclick = () => { storageTab = k; placeFor = null; renderStorage(); }; tabs.appendChild(b); }
   if (storageTab === 'animals') {
     if (!S.storage.animals.length) box.appendChild(el('p', 'empty', 'No animals in storage. Animals from the wheel, the safari, the nursery and the lab arrive here.'));
-    const order = Object.keys(SPECIES), sorted = [...S.storage.animals].sort((a, b) => order.indexOf(a.species) - order.indexOf(b.species) || b.variant - a.variant || (a.sex < b.sex ? -1 : 1));
+    const biomes = [...new Set(S.storage.animals.map(r => SPECIES[r.species].biome))];
+    if (storeFilter && !biomes.includes(storeFilter)) storeFilter = null;
+    if (biomes.length > 1 && S.storage.animals.length > 5) {
+      const fr = el('div', 'row wrap filters');
+      fr.appendChild(sbtn('mini' + (!storeFilter ? ' on' : ''), `All ${S.storage.animals.length}`, () => { storeFilter = null; }));
+      for (const b of biomes) fr.appendChild(sbtn('mini' + (storeFilter === b ? ' on' : ''), `${BIOMES[b].name} ${S.storage.animals.filter(r => SPECIES[r.species].biome === b).length}`, () => { storeFilter = storeFilter === b ? null : b; }));
+      box.appendChild(fr);
+    }
+    const order = Object.keys(SPECIES), sorted = S.storage.animals.filter(r => !storeFilter || SPECIES[r.species].biome === storeFilter).sort((a, b) => order.indexOf(a.species) - order.indexOf(b.species) || b.variant - a.variant || (a.sex < b.sex ? -1 : 1));
     for (const r of sorted) {
       const row = el('div', 'pick');
       row.appendChild(iconCanvas(r.species, 30, 'animal', { variant: r.variant, baby: r.baby }));
