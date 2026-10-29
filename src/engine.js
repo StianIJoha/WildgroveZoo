@@ -1888,7 +1888,7 @@ function takePhoto() {
   x.font = '800 18px Grandstander, Nunito, system-ui, sans-serif'; const w = x.measureText(label).width + 28;
   x.fillStyle = 'rgba(255,251,242,0.92)'; x.beginPath(); x.roundRect ? x.roundRect(14, H - 50, w, 36, 18) : x.rect(14, H - 50, w, 36); x.fill();
   x.fillStyle = '#2d6b3a'; x.textBaseline = 'middle'; x.fillText(label, 28, H - 31);
-  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.normalize('NFKD').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'wildgrove'}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
+  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/ß/g, 'ss').normalize('NFKD').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'wildgrove'}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
   sfx('coin'); toast('Photo saved');
 }
 function openSaveModal() {
