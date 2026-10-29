@@ -1226,6 +1226,7 @@ function updateHUD() {
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
   $('#rankName').textContent = G.RANKS[S.stats.rank || 0].name;
+  const zn = S.settings.zooName || 'Wildgrove'; if ($('#zooName').textContent !== zn) { $('#zooName').textContent = zn; document.title = zn === 'Wildgrove' ? 'Wildgrove Zoo' : `${zn} · Wildgrove Zoo`; }
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
   if (S.tut < 0) ensureTasks();
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
@@ -1799,18 +1800,35 @@ function renderHub() {
     const wl = Object.entries(S.wishLog).sort((a, b) => b[1] - a[1]).slice(0, 4);
     if (wl.length) { ex.appendChild(el('h3', '', 'Visitor wishes')); ex.appendChild(el('p', 'hint', `Granted ${S.stats.wishes}. Most missed: ${wl.map(([k, n]) => { const [kind, key] = k.split(':'); return `${wishName({ kind, key })} (${n}×)`; }).join(', ')}.`)); }
     ex.appendChild(el('h3', '', 'Settings'));
-    const st = S.settings, rr = el('div', 'row wrap');
+    const st = S.settings, nameRow = el('div', 'row wrap');
+    const nf = el('input', 'namefield'); nf.maxLength = 22; nf.placeholder = 'Wildgrove'; nf.value = st.zooName || ''; nf.setAttribute('aria-label', 'Zoo name');
+    nf.onchange = () => { st.zooName = nf.value.trim().slice(0, 22); updateHUD(); dirty(); toast(`Welcome to ${st.zooName || 'Wildgrove'}!`); };
+    nameRow.appendChild(el('b', '', 'Zoo name')); nameRow.appendChild(nf); ex.appendChild(nameRow);
+    const rr = el('div', 'row wrap');
     rr.appendChild(hbtn('mini' + (st.muted ? ' ghost' : ' on'), `Sound ${st.muted ? 'off' : 'on'}`, () => { st.muted = !st.muted; applySettings(); if (!muted) audioUnlock(); }));
     rr.appendChild(hbtn('mini' + (st.music === false ? ' ghost' : ' on'), `Music ${st.music === false ? 'off' : 'on'}`, () => { st.music = st.music === false; applySettings(); }));
     rr.appendChild(hbtn('mini' + (st.night ? ' on' : ' ghost'), `Day & night ${st.night ? 'on' : 'off'}`, () => { st.night = !st.night; }));
     ex.appendChild(rr);
     const sr = el('div', 'row wrap');
     sr.appendChild(hbtn('mini', `${ic('save', 14)} Save code & backup`, () => openSaveModal()));
+    sr.appendChild(hbtn('mini', 'Take a photo', () => takePhoto()));
     sr.appendChild(hbtn('mini ghost', 'Start a new zoo', () => { $('#resetConfirm').hidden = false; }));
     ex.appendChild(sr);
     ex.appendChild(el('p', 'hint', 'Keys: H tips · B build · P paths · C clear · S storage · G goals · Z zoo · +/− zoom · M sound · Ctrl+Z undo decor · Esc close'));
     box.appendChild(ex);
   }
+}
+// saves the current view (without the HUD) as a PNG, with the zoo's name in the corner
+function takePhoto() {
+  closeSheets(); select(null); setTool(null); render();
+  const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; const x = c.getContext('2d');
+  x.drawImage(cv, 0, 0); x.scale(DPR, DPR);
+  const name = S.settings.zooName || 'Wildgrove', label = `${name} · ${G.RANKS[S.stats.rank || 0].name}`;
+  x.font = '800 18px Grandstander, Nunito, system-ui, sans-serif'; const w = x.measureText(label).width + 28;
+  x.fillStyle = 'rgba(255,251,242,0.92)'; x.beginPath(); x.roundRect ? x.roundRect(14, H - 50, w, 36, 18) : x.rect(14, H - 50, w, 36); x.fill();
+  x.fillStyle = '#2d6b3a'; x.textBaseline = 'middle'; x.fillText(label, 28, H - 31);
+  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.replace(/[^\w-]+/g, '-').toLowerCase()}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
+  sfx('coin'); toast('Photo saved');
 }
 function openSaveModal() {
   const m = $('#saveModal'); m.hidden = false; $('#saveOut').value = exportCode(); $('#saveIn').value = ''; $('#saveMsg').textContent = '';
