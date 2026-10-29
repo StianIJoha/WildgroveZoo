@@ -18,6 +18,7 @@ let S = null, uid = 1;
 const rnd = Math.random;
 const pick = a => a[Math.floor(rnd() * a.length)];
 function seeded(seed) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+const LEVEL_GEMS = 2;
 const xpFor = l => Math.round(50 * Math.pow(l, 1.55));
 const capOf = e => 4 + e.level;
 
@@ -104,7 +105,7 @@ function loadState(s) {
   S = s; visitors = []; floaters = []; selected = null; tool = null;
   const ids = [...S.objects.flatMap(o => (o.animals || []).map(a => a.id)), ...S.storage.animals.map(a => a.id)];
   uid = Math.max(1, ...ids.filter(n => typeof n === 'number')) + 1000;
-  rebuild(); setTool(null); select(null); closeSheets(); tipOpen = false; $('#tutorial').dataset.step = ''; $('#tutSkip').textContent = 'Skip tutorial'; $('#tutOk').textContent = 'Let\'s go';
+  rebuild(); setTool(null); select(null); closeSheets(); applySettings(); tipOpen = false; $('#tutorial').dataset.step = ''; $('#tutSkip').textContent = 'Skip tutorial'; $('#tutOk').textContent = 'Let\'s go';
   if (S.cam) { cam.x = S.cam.x; cam.y = S.cam.y; cam.z = S.cam.z; clampCam(); } else centerCam();
   computeMeter(); updateHUD(); tutorialCheck(); save();
 }
@@ -143,10 +144,10 @@ function addCoins(n, earned) { S.coins += n; if (earned && n > 0) S.stats.earned
 function addXp(n) {
   S.xp += n;
   while (S.xp >= xpFor(S.level)) {
-    S.xp -= xpFor(S.level); S.level++; S.gems += 3;
+    S.xp -= xpFor(S.level); S.level++; S.gems += LEVEL_GEMS;
     const unl = [...Object.values(SPECIES), ...Object.values(SHOPS), ...Object.values(BUILDINGS), ...Object.values(BIOMES)].filter(x => x.lvl === S.level).map(x => x.name);
     const exp = EXPANSIONS.find(e => e.lvl === S.level);
-    if (S.tut >= 0 || !document.getElementById('levelUp')) toast(`Level ${S.level}! +3 gems` + (unl.length ? ` · New: ${unl.join(', ')}` : '') + (exp ? ' · Land expansion available' : ''), 'level');
+    if (S.tut >= 0 || !document.getElementById('levelUp')) toast(`Level ${S.level}! +${LEVEL_GEMS} gems` + (unl.length ? ` · New: ${unl.join(', ')}` : '') + (exp ? ' · Land expansion available' : ''), 'level');
     else levelCard(S.level, !!exp);
     sfx('level'); burst();
   }
@@ -164,7 +165,7 @@ function levelCard(lvl, exp) {
   // several levels at once (a big reward, offline time) stack into one card
   const m = $('#levelUp'), box = m.querySelector('.unlocks');
   if (m.hidden) { box.innerHTML = ''; lvGained = 0; }
-  lvGained++; $('#lvNum').textContent = lvl; $('#lvGems').textContent = 3 * lvGained;
+  lvGained++; $('#lvNum').textContent = lvl; $('#lvGems').textContent = LEVEL_GEMS * lvGained;
   for (const u of L) { const d = el('div', 'unlock'); d.appendChild(u.c); d.appendChild(el('b', '', u.name)); d.appendChild(el('small', '', u.kind)); box.appendChild(d); }
   m.querySelector('.lvnone').hidden = !!box.children.length;
   m.hidden = false;
@@ -193,7 +194,7 @@ const compact = n => n >= 10000 ? (n / 1000).toFixed(0) + 'k' : n >= 1000 ? (n /
 function careReward(at, species) {
   S.stats.care++; addXp(2);
   if (species) S.stats.careBy[species] = (S.stats.careBy[species] || 0) + 1;
-  if (rnd() < 0.18) { S.paws++; if (at) floaters.push({ wx: at.x, wy: at.y - 10, text: '+1 paw', t: 0, color: '#c6a0ee' }); }
+  if (rnd() < 0.1) { S.paws++; if (at) floaters.push({ wx: at.x, wy: at.y - 10, text: '+1 paw', t: 0, color: '#c6a0ee' }); }
   if (rnd() < 0.03) dropCard(false);
 }
 function dropCard(force) {
@@ -275,7 +276,7 @@ function tickEnc(e, dt, offline, rep) {
   e.sickT = (e.sickT || 0) + dt;
   if (e.sickT >= 10) {
     e.sickT = 0;
-    if (!offline) for (const a of e.animals) if (!a.sick && NEEDS.some(n => S.clock - a.due[n] > needInterval(a.species, n)) && rnd() < 0.03) {
+    if (!offline) for (const a of e.animals) if (!a.sick && NEEDS.some(n => S.clock - a.due[n] > 0.5 * needInterval(a.species, n)) && rnd() < 0.03) {
       a.sick = true;
       toast(S.stats.sickSeen ? `${a.name} the ${SPECIES[a.species].name.toLowerCase()} is sick. Tap the medicine bubble.` : `${a.name} got sick from being neglected! Sick animals are unhappy and stop breeding. Tap the medicine bubble to treat them, or hire the vet.`, 'warn');
       S.stats.sickSeen = 1;
@@ -379,7 +380,7 @@ function collectShop(o) {
 }
 function finishBuildCost(o) { return Math.max(1, Math.ceil((o.build - S.clock) / 120)); }
 function rushBuild(o) { const c = finishBuildCost(o); if (S.gems < c) { toast(`You need ${c} gem${c > 1 ? 's' : ''}`, 'warn'); return; } S.gems -= c; o.build = S.clock; sfx('gem'); }
-function tickBuild(o) { if (o.build && S.clock >= o.build) { o.build = null; delete o.paid; if (o.kind === 'enc' || o.kind === 'shop' || o.kind === 'bld') { toast(`${objName(o)} is ready!`); sfx('build'); addXp(10); groundDirty = true; } } }
+function tickBuild(o) { if (o.build && S.clock >= o.build) { o.build = null; delete o.paid; delete o.xp; if (o.kind === 'enc' || o.kind === 'shop' || o.kind === 'bld') { toast(`${objName(o)} is ready!`); sfx('build'); addXp(10); groundDirty = true; } } }
 function tickBld(o, dt) {
   if (o.build) return;
   if (o.type === 'nursery') for (const s of o.slots) { if (s.rec.baby) { s.rec.grow += dt * 3 / SPECIES[s.rec.species].grow; if (s.rec.grow >= 1) { s.rec.grow = 1; s.rec.baby = false; } } }
@@ -421,7 +422,7 @@ function spawnVisitor() {
   v.kid = rnd() < 0.25; v.dress = rnd() < 0.35;
   const hr = rnd(); v.hat = hr < (summer ? 0.35 : 0.12) ? 'sun' : hr < (winter ? 0.5 : 0.24) ? (winter ? 'beanie' : 'cap') : null;
   v.hatColor = pick(G.VISITOR_SHIRTS); if (v.kid) v.speed *= 1.15;
-  if (S.tut < 0 && rnd() < 0.3) {
+  if (S.tut < 0 && rnd() < 0.18) {
     v.wish = makeWish();
     if (!S.stats.wishHint) { S.stats.wishHint = 1; toast('A visitor has a wish! Tap their thought bubble to see it. Granting wishes earns tips.'); }
   }
@@ -434,10 +435,10 @@ function makeWish() {
   const r = rnd();
   const kept = [...new Set(S.objects.filter(o => o.kind === 'enc').flatMap(o => o.animals.map(a => a.species)))];
   if (r < 0.62) {
-    const pool = kept.length && rnd() < 0.7 ? kept : Object.keys(SPECIES).filter(k => SPECIES[k].lvl <= S.level + 2);
+    const pool = kept.length && rnd() < 0.7 ? kept : Object.keys(SPECIES).filter(k => SPECIES[k].lvl <= S.level);
     return { kind: 'animal', key: pick(pool), t: 0 };
   }
-  if (r < 0.88) return { kind: 'shop', key: pick(Object.keys(SHOPS).filter(k => SHOPS[k].lvl <= Math.max(2, S.level))), t: 0 };
+  if (r < 0.88) return { kind: 'shop', key: pick(Object.keys(SHOPS).filter(k => SHOPS[k].lvl <= S.level)), t: 0 };
   return { kind: 'rest', key: 'bench', t: 0 };
 }
 const wishName = w => w.kind === 'animal' ? SPECIES[w.key].name.toLowerCase() : w.kind === 'shop' ? SHOPS[w.key].name.toLowerCase() : 'a bench to rest on';
@@ -448,7 +449,7 @@ function wishMatches(w, o) {
   return o.kind === 'deco' && DECOR[o.type] && DECOR[o.type].rest;
 }
 function grantWish(v) {
-  const tip = 4 + S.level * 2;
+  const tip = 2 + Math.ceil(S.level / 2);
   addCoins(tip, true); addXp(3); S.stats.wishes++; v.wish = null; v.heart = 2;
   const p = iso(v.gx, v.gy); floaters.push({ wx: p.x, wy: p.y - 46, text: `Wish granted! +${tip}`, t: 0, color: '#ffd76a' });
   if (rnd() < 0.08) dropCard(false);
@@ -498,7 +499,7 @@ function stepVisitor(v, dt) {
   if (d < 0.03) {
     v.px = v.cx; v.py = v.cy; v.cx = v.tx; v.cy = v.ty;
     if (v.leaving && v.cx === GATE.x && v.cy === GATE.y) { v.gone = true; return; }
-    if (v.route && v.route.length) { const [nx, ny] = v.route.shift(); if (walkable(nx, ny)) { v.tx = nx; v.ty = ny; return; } v.route = null; }
+    if (v.route && v.route.length) { const [nx, ny] = v.route.shift(); if (walkable(nx, ny)) { v.tx = nx; v.ty = ny; return; } v.route = null; v.dest = null; }
     if (v.route && !v.route.length && v.dest) { arrive(v, v.dest); v.route = null; v.dest = null; return; }
     // plan the next outing
     if (!v.dest && (rnd() < 0.5 || v.age > v.life)) {
@@ -516,7 +517,7 @@ function stepVisitor(v, dt) {
 }
 function arrive(v, d) {
   if (d.gate) { v.gone = true; return; }
-  const o = d.obj; if (!o || !S.objects.includes(o)) return;
+  const o = d.obj; if (!o || !S.objects.includes(o) || !frontCells(o).some(([x, y]) => x === v.cx && y === v.cy)) return;
   if (o.kind === 'enc') { v.pause = 2 + rnd() * 3; if (encMood(o) > 0.7) v.heart = 1.6; }
   else v.pause = 1 + rnd() * 2;
   if (o.kind === 'shop' && o.type === 'balloon' && v.kid && !v.balloon) v.balloon = pick(['#e4572e', '#f2b632', '#2e86ab', '#ef7aa0', '#8e5ea2']);
@@ -577,7 +578,7 @@ let tool = null, hover = null, selected = null, lastPlaced = null;
 function undoPlace() {
   const l = lastPlaced; lastPlaced = null;
   if (!l || performance.now() - l.at > 30000 || !S.objects.includes(l.o)) { toast('Nothing to undo'); return; }
-  S.objects = S.objects.filter(x => x !== l.o); addCoins(l.cost); rebuild(); sfx('path'); toast(`${objName(l.o)} removed, ${l.cost} coins back`); dirty();
+  S.objects = S.objects.filter(x => x !== l.o); addCoins(l.cost); S.xp = Math.max(0, S.xp - (l.xp || 0)); rebuild(); sfx('path'); toast(`${objName(l.o)} removed, ${l.cost} coins back`); dirty();
 }
 function footprint(t) {
   if (t.kind === 'move' || t.kind === 'place') return { w: t.w, h: t.h };
@@ -618,8 +619,9 @@ function place(gx, gy) {
   else if (tool.kind === 'shop') o = { id: 's' + uid++, kind: 'shop', type: tool.type, gx, gy, w: 1, h: 1, prog: 0, build: S.clock + (S.tut >= 0 && tool.type === 'feeder' ? 5 : SHOPS[tool.type].build) };
   else if (tool.kind === 'bld') o = { id: 'b' + uid++, kind: 'bld', type: tool.type, gx, gy, w: 2, h: 2, build: S.clock + BUILDINGS[tool.type].build, slots: [], job: null };
   else o = { id: 'd' + uid++, kind: 'deco', type: tool.type, gx, gy, w: 1, h: 1 };
-  if (o.build) o.paid = cost; else lastPlaced = { o, cost, at: performance.now() };
-  S.objects.push(o); addXp(o.kind === 'deco' ? 1 : 8); rebuild(); sfx('build');
+  const xp = o.kind === 'deco' ? 1 : 8;
+  if (o.build) { o.paid = cost; o.xp = xp; } else lastPlaced = { o, cost, xp, at: performance.now() };
+  S.objects.push(o); addXp(xp); rebuild(); sfx('build');
   if (o.kind !== 'deco') { setTool(null); select(o); }
   dirty();
 }
@@ -637,8 +639,8 @@ function bulldoze(gx, gy, fromDrag) {
   if (o.kind === 'deco' && !fromDrag) { removeObj(o); return; }
   if (!fromDrag) select(o);
 }
-function sellValue(o) { if (o.kind === 'deco') return DECOR[o.type] ? Math.floor(DECOR[o.type].cost / 2) : 0; if (o.kind === 'shop') return Math.floor(SHOPS[o.type].cost / 3); if (o.kind === 'bld') return Math.floor(BUILDINGS[o.type].cost / 3); if (o.kind === 'enc') { let c = BIOMES[o.biome].cost; for (let l = 1; l <= o.level; l++) c += UPGRADES[l].coins; return Math.floor(c / 2); } return 0; }
-function removeObj(o) { if (o.kind === 'enc') { let p = 0; for (let l = 1; l <= o.level; l++) p += UPGRADES[l].paws; S.paws += Math.floor(p / 2); } addCoins(sellValue(o)); S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); sfx('path'); dirty(); }
+function sellValue(o) { if (o.kind === 'deco') return DECOR[o.type] ? Math.floor(DECOR[o.type].cost / 2) : 0; if (o.kind === 'shop') return Math.floor(SHOPS[o.type].cost / 3); if (o.kind === 'bld') return Math.floor(BUILDINGS[o.type].cost / 3); if (o.kind === 'enc') { let c = BIOMES[o.biome].cost; for (let l = 1; l <= o.level; l++) c += UPGRADES[l].coins; for (const t of o.toys || []) c += TOYS[t] ? TOYS[t].cost.coins : 0; return Math.floor(c / 2); } return 0; }
+function removeObj(o) { if (o.kind === 'enc') { let p = 0; for (let l = 1; l <= o.level; l++) p += UPGRADES[l].paws; for (const t of o.toys || []) p += TOYS[t] ? TOYS[t].cost.paws : 0; S.paws += Math.floor(p / 2); } addCoins(sellValue(o)); S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); sfx('path'); dirty(); }
 function storeObj(o) {
   if (o.kind === 'enc' && o.animals.length) { toast('Move the animals out first', 'warn'); return; }
   if (o.build) { toast('Wait until it is finished', 'warn'); return; }
@@ -1299,7 +1301,7 @@ function btn(cls, html, fn, disabled) { const b = el('button', cls, html); b.onc
 function buildingPanel(P, o) {
   P.appendChild(el('div', 'phead', `<div><div class="eyebrow">Under construction</div><h2>${objName(o)}</h2><div class="sub">Ready in <b data-live="bt">${fmtTime(o.build - S.clock)}</b></div></div>`));
   const r = el('div', 'row wrap'); r.appendChild(btn('btn gem', `Finish now ${priceTag({ gems: finishBuildCost(o) })}`, () => rushBuild(o)));
-  if (o.paid) r.appendChild(btn('mini ghost', `Cancel · refund ${fmt(o.paid)}`, () => { addCoins(o.paid); delete o.paid; S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); sfx('path'); toast('Construction cancelled, coins refunded'); dirty(); }));
+  if (o.paid && S.tut < 0) r.appendChild(btn('mini ghost', `Cancel · refund ${fmt(o.paid)}`, () => { addCoins(o.paid); delete o.paid; S.xp = Math.max(0, S.xp - (o.xp || 0)); S.objects = S.objects.filter(x => x !== o); rebuild(); select(null); sfx('path'); toast('Construction cancelled, coins refunded'); dirty(); }));
   P.appendChild(r);
 }
 function livePanel(o) {
@@ -1406,7 +1408,7 @@ function encPanel(P, o) {
   if (o.level < 4) { const U = UPGRADES[o.level + 1]; foot.appendChild(btn('mini', `Upgrade → ${capOf(o) + 1} spots ${priceTag(U)}`, () => { if (pay(U)) { o.level++; addXp(20 * o.level); sfx('build'); toast(`Enclosure upgraded: room for ${capOf(o)} animals`); dirty(); } })); }
   foot.appendChild(btn('mini', 'Move', () => setTool({ kind: 'move', obj: o, w: 3, h: 3 })));
   if (!o.animals.length) foot.appendChild(btn('mini', 'Store', () => storeObj(o)));
-  if (confirmRemove === o) { foot.appendChild(el('span', 'warn', `Remove it? Animals go to storage. You get back ${fmt(sellValue(o))} coins${o.level ? ' (half of the enclosure and its upgrades). Store keeps the upgrades instead' : ''}.`)); foot.appendChild(btn('mini danger', 'Yes, remove', () => { for (const a of o.animals) S.storage.animals.push(toRec(a)); removeObj(o); })); foot.appendChild(btn('mini ghost', 'Keep', () => { confirmRemove = null; })); }
+  if (confirmRemove === o) { foot.appendChild(el('span', 'warn', `Remove it? Animals go to storage. You get back ${fmt(sellValue(o))} coins${o.level || (o.toys && o.toys.length) ? ` (half of the enclosure${o.toys && o.toys.length ? ', its toys' : ''}${o.level ? ' and its upgrades' : ''}). Store keeps them instead` : ''}.`)); foot.appendChild(btn('mini danger', 'Yes, remove', () => { for (const a of o.animals) S.storage.animals.push(toRec(a)); removeObj(o); })); foot.appendChild(btn('mini ghost', 'Keep', () => { confirmRemove = null; })); }
   else foot.appendChild(btn('mini ghost', 'Remove', () => { confirmRemove = o; }));
   P.appendChild(foot);
   livePanel(o);
@@ -1644,7 +1646,7 @@ function ensureTasks() {
   S.tasks = { next: Date.now() + G.TASK_EVERY, bonus: false, list: picks.map((d, i) => {
     const sp = d.id === 'careSp' ? pick(kept) : null, n = d.n(L), t = { id: d.id, stat: d.stat, sp, n, claimed: false };
     t.base = taskVal(t); t.text = d.text(n, sp && plural(sp));
-    t.reward = i === 2 ? { gems: 1, paws: 2 + Math.floor(L / 5), xp: 20 + L * 4 } : { coins: 120 + L * 45, paws: 1 + Math.floor(L / 4), xp: 20 + L * 4 };
+    t.reward = i === 2 ? { gems: 1, paws: 2 + Math.floor(L / 5), xp: 20 + L * 4 } : { coins: 200 + L * 80, paws: 1 + Math.floor(L / 4), xp: 20 + L * 4 };
     return t; }) };
 }
 const taskProg = t => Math.min(t.n, taskVal(t) - t.base);
@@ -1656,7 +1658,7 @@ function renderTasks(box) {
   for (const t of S.tasks.list) {
     const p = taskProg(t), done = p >= t.n;
     const r = el('div', 'quest task' + (t.claimed ? ' claimed' : done ? ' done' : ''));
-    r.innerHTML = `<div class="qt">${t.claimed ? '✓ ' : ''}${t.text}</div><div class="qp"><i><b style="width:${p / t.n * 100}%"></b></i><span>${compact(p)} / ${compact(t.n)}</span></div><div class="qr">${priceTag(t.reward)}${t.reward.xp ? ` <span class="pt">${t.reward.xp} XP</span>` : ''}</div>`;
+    r.innerHTML = `<div class="qt">${t.claimed ? '✓ ' : ''}${t.text}</div><div class="qp"><i><b style="width:${p / t.n * 100}%"></b></i><span>${compact(p)} / ${compact(t.n)}</span></div><div class="qr">${priceTag(t.reward)}${t.reward.xp ? ` <span class="pt">+${t.reward.xp} XP</span>` : ''}</div>`;
     if (done && !t.claimed) { const b = el('button', 'btn gold', 'Claim'); b.onclick = () => { if (t.claimed) return; t.claimed = true; grant(t.reward); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; r.appendChild(b); }
     box.appendChild(r);
   }
@@ -1678,7 +1680,7 @@ function renderQuests(force) {
   if (!list.length) box.appendChild(el('p', 'empty', 'Every goal is complete. Wildgrove is legendary.'));
   for (const { q, p, done } of list) {
     const r = el('div', 'quest' + (done ? ' done' : ''));
-    r.innerHTML = `<div class="qt">${q.text}</div><div class="qp"><i><b style="width:${p / q.goal * 100}%"></b></i><span>${compact(p)} / ${compact(q.goal)}</span></div><div class="qr">${priceTag(q.reward)}${q.reward.xp ? ` <span class="pt">${q.reward.xp} XP</span>` : ''}</div>`;
+    r.innerHTML = `<div class="qt">${q.text}</div><div class="qp"><i><b style="width:${p / q.goal * 100}%"></b></i><span>${compact(p)} / ${compact(q.goal)}</span></div><div class="qr">${priceTag(q.reward)}${q.reward.xp ? ` <span class="pt">+${q.reward.xp} XP</span>` : ''}</div>`;
     if (done) { const b = el('button', 'btn gold', 'Claim'); b.onclick = () => { if (S.claimed.includes(q.id)) return; S.claimed.push(q.id); grant(q.reward); sfx('level'); renderQuests(true); updateHUD(); dirty(); }; r.appendChild(b); }
     box.appendChild(r);
   }
@@ -2000,8 +2002,8 @@ function startMusic() {
 
 function openShop(tab) { setTool(null); closeSheets(); select(null); shopTab = tab; $('#shop').hidden = false; document.body.classList.add('sheet-open'); renderShop(); }
 function hotkey(e) {
-  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.altKey || e.metaKey) return;
-  if (e.ctrlKey) { if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); undoPlace(); } return; }
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.altKey) return;
+  if (e.ctrlKey || e.metaKey) { if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); undoPlace(); } return; }
   if (!document.querySelector('.modal:not([hidden])')) {
     const k = e.key.toLowerCase(), click = id => { e.preventDefault(); $(id).click(); };
     if (k === 'b') click('#btnShop'); else if (k === 'p') click('#btnPath'); else if (k === 'c' || k === 'x') click('#btnBulldoze');

@@ -157,10 +157,10 @@ const EXPANSIONS = [
 // enclosure upgrades: capacity 4 → 8
 const UPGRADES = [
   null,
-  { coins: 400,  paws: 5 },
-  { coins: 1200, paws: 12 },
-  { coins: 3000, paws: 25 },
-  { coins: 7000, paws: 45 },
+  { coins: 400,  paws: 8 },
+  { coins: 1200, paws: 20 },
+  { coins: 3000, paws: 40 },
+  { coins: 7000, paws: 70 },
 ];
 
 const HELPERS = {
@@ -247,16 +247,16 @@ const QUESTS = [
   { id: 'g7',  text: 'Collect from shops 15 times',        goal: 15, prog: S => S.stats.shopCollects,              reward: { coins: 300, xp: 50, gems: 1 } },
   { id: 'g7b', text: 'Grant 5 visitor wishes',             goal: 5,  prog: S => S.stats.wishes || 0,               reward: { coins: 250, xp: 40, paws: 2 } },
   { id: 'g8',  text: 'Welcome 3 baby animals',             goal: 3,  prog: S => S.stats.babies,                    reward: { coins: 300, xp: 60, gems: 2 } },
-  { id: 'g9',  text: 'Reach a Zoo meter of 80%',           goal: 80, prog: S => S.stats.peakMeter,                 reward: { coins: 400, xp: 60, paws: 5 } },
+  { id: 'g9',  text: 'Reach a Zoo meter of 80%',           goal: 80, prog: S => S.stats.peakMeter,                 reward: { coins: 300, xp: 60, paws: 5 } },
   { id: 'g10', text: 'Reach level 5',                      goal: 5,  prog: S => S.level,                           reward: { coins: 500, gems: 2 } },
   { id: 'g10b', text: 'Give an enclosure a toy',          goal: 1,  prog: S => S.objects.some(o => o.kind === 'enc' && o.toys && o.toys.length) ? 1 : 0, reward: { coins: 300, xp: 50, paws: 2 } },
   { id: 'g10c', text: 'Finish all three daily tasks',     goal: 1,  prog: S => S.tasks && S.tasks.bonus ? 1 : (S.stats.taskBonus || 0), reward: { coins: 400, xp: 60, gems: 1 } },
   { id: 'g11', text: 'Build the animal nursery',           goal: 1,  prog: S => S.objects.filter(o => o.type === 'nursery' && !o.build).length, reward: { coins: 500, xp: 80 } },
-  { id: 'g12', text: 'Keep 5 different species',           goal: 5,  prog: (S, Z) => Z.speciesCount(),             reward: { coins: 800, xp: 120, gems: 2 } },
-  { id: 'g13', text: 'Complete a collection',              goal: 1,  prog: S => S.stats.collections,               reward: { coins: 600, xp: 100, gems: 2 } },
+  { id: 'g12', text: 'Keep 5 different species',           goal: 5,  prog: (S, Z) => Z.speciesCount(),             reward: { coins: 600, xp: 120, gems: 2 } },
+  { id: 'g13', text: 'Complete a collection',              goal: 1,  prog: S => S.stats.collections,               reward: { coins: 450, xp: 100, gems: 2 } },
   { id: 'g13b', text: 'Keep a pair of seals on the coast', goal: 2, prog: (S, Z) => Z.pairCount('seal'),          reward: { coins: 900, xp: 140, gems: 2 } },
-  { id: 'g14', text: 'Send a safari expedition',           goal: 1,  prog: S => S.stats.safaris,                   reward: { coins: 600, xp: 100 } },
-  { id: 'g15', text: 'Have 40 visitors at once',           goal: 40, prog: S => S.stats.peakVisitors,              reward: { coins: 1000, xp: 150, gems: 2 } },
+  { id: 'g14', text: 'Send a safari expedition',           goal: 1,  prog: S => S.stats.safaris,                   reward: { coins: 450, xp: 100 } },
+  { id: 'g15', text: 'Have 40 visitors at once',           goal: 40, prog: S => S.stats.peakVisitors,              reward: { coins: 750, xp: 150, gems: 2 } },
   { id: 'g16', text: 'Breed a rarer subspecies in the lab', goal: 1, prog: S => S.stats.labUp,                     reward: { coins: 1500, xp: 200, gems: 3 } },
   { id: 'g17', text: 'Expand your zoo',                    goal: 1,  prog: S => S.stats.expansions,                reward: { coins: 2000, xp: 250, gems: 3 } },
   { id: 'g18', text: 'Upgrade an enclosure to level 4',    goal: 4,  prog: S => Math.max(0, ...S.objects.filter(o => o.kind === 'enc').map(o => o.level + 1)), reward: { coins: 2500, xp: 300, gems: 3 } },

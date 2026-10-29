@@ -11,6 +11,8 @@ It is plain HTML, CSS and JavaScript with no framework and no dependencies. All 
 | Play | Open `index.html` in a browser |
 | Rebuild after editing `src/` | `node build.js` |
 | Smoke test (tutorial + key systems) | `pip install playwright`, `python -m playwright install chromium`, then `python tests/playthrough.py`. Set `PW_CHROMIUM=/path/to/chrome` to use an already-installed Chromium |
+| Systems test (save, tasks, toys, vet, wishes, night, refunds, shortcuts, offline, migration, phone layout…) | `python tests/systems.py` (or name groups: `python tests/systems.py toys vet`) |
+| Economy simulation (bot plays 45 min, prints income mix) | `node tests/economy.js [minutes] [seed] [careEverySec]` |
 | Look at all sprites | Open `tools/art-preview.html` (params `?z=2&s=animals\|decor\|ui\|all`) |
 
 `build.js` concatenates `src/shell.html` and then `art.js`, `data.js` and `engine.js` as inline `<script>` blocks, in that order. **Always edit `src/`, never `index.html`.**
@@ -24,6 +26,8 @@ It is plain HTML, CSS and JavaScript with no framework and no dependencies. All 
 | `src/data.js` | ~300 | Global `GAME`: all game data and balance numbers (species, shops, prices, goals, tutorial text…) |
 | `src/engine.js` | ~1,900 | One IIFE with simulation, rendering, input, UI panels, saving and audio |
 | `tests/playthrough.py` | | Playwright smoke test that taps through the tutorial like a player |
+| `tests/systems.py` | | Playwright checks for every newer system, seeded |
+| `tests/economy.js` | | Headless economy bot for balance tuning |
 | `tools/art-preview.html` | | Sprite sheet viewer for `art.js` |
 
 ## Architecture
@@ -75,7 +79,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 - **Currencies:**
   - Coins: tickets and shops.
   - Gems: level-ups, goals, wheel. Used to rush timers, hire staff, expand early and adopt rare animals.
-  - Paws: earned from care actions (18% chance each), litter and the nursery. Used for enclosure upgrades and the lab.
+  - Paws: earned from care actions (10% chance each), litter and the nursery. Used for enclosure upgrades and the lab.
 - **19 species in 7 habitats**, each species locked to its own habitat:
   - Meadow: bunny, macaw
   - Ice floe: penguin, polar bear
@@ -90,11 +94,11 @@ Any object can have `build`, the game time at which construction finishes, and `
   Each species has an unlock level, a price, a food type, attraction stars, breed and grow times, and a care multiplier.
 - **Per-animal needs:** food (eaten from bought stock, 7 food types), water, pet and play, each due on its own timer (base 300/240/420/540 s × the species care multiplier). Bubbles above an enclosure care for every animal that needs it, and tapping one animal cares for just that one.
 - **Mood** = 1 − 0.2 per unmet need − 0.4 if sick − a dung penalty, +0.1 in the home habitat. Breeding needs an adult ♂ and ♀, free space, and every adult healthy with mood ≥ 0.7.
-- **Sickness:** checked every 10 s. An animal with a need overdue by more than one full interval has a 3% chance to fall sick. Medicine cures it. The first sickness shows a longer explanation. New zoos start with 5 medicine.
+- **Sickness:** checked every 10 s. An animal with a need overdue by more than half an interval has a 3% chance to fall sick. Medicine cures it. The first sickness shows a longer explanation. New zoos start with 5 medicine.
 - **Toys:** up to 2 per enclosure, bought with coins and paws. Each adds `TOY_MOOD` mood and makes the play need last `TOY_PLAY` longer.
 - **Dung** builds up in enclosures and **litter** on paths (a trash bin within 3 tiles cuts litter to a quarter). Both lower tidiness.
 - **Zoo meter (0–100%)** is weighted: animal mood 40%, tidiness 25%, variety 15%, decor 10%, babies 10%. Variety is judged against `min(8, 2 + level × 0.6)` kinds. Visitor target = min(80, attraction stars ÷ 3 × (0.4 + 0.6 × meter)), lowered by up to 45% at night. Visitors spawn at the gate, pay a ticket (1 + level ÷ 3 coins), pick attractions (weighted by appeal and distance), route there over the path graph with `route()` (BFS), look for a while, and head back to the gate when their time is up.
-- **Visitor wishes:** 30% of visitors wish for an animal, a shop or somewhere to sit (thought bubble; tap it to read). They head for a match; reaching one pays a tip (4 + 2 × level coins). Unmet wishes expire after 45 s and are counted in `wishLog`, shown in the Zoo office as "most missed".
+- **Visitor wishes:** 18% of visitors wish for an unlocked animal, a shop or somewhere to sit (thought bubble; tap it to read). They head for a match; reaching one pays a tip (2 + level ÷ 2 coins). Unmet wishes expire after 45 s and are counted in `wishLog`, shown in the Zoo office as "most missed".
 - **Day/night:** a day is `DAY_LENGTH` (900) game seconds; night falls at 60% and lifts at 92%. Animals sleep, visitors thin out and lights glow. Off during the tutorial, and can be switched off in settings.
 - **Zoo rank:** `RANKS` by attraction stars (Backyard zoo → World-famous zoo), shown under the logo; each new rank pays gems once.
 - **Shops** (8 types): each fills over its pay period, faster with more visitors and a higher meter, and only when connected to a path. When full, a silver coin appears to collect. Shops are the main income.
@@ -126,6 +130,10 @@ Any object can have `build`, the game time at which construction finishes, and `
 - **Fonts** (Grandstander and Nunito) load from Google Fonts and fall back to system fonts when offline.
 
 ## Improvement ideas (rough priority)
+
+**Balance (from `tests/economy.js`, 45 min, seed 1):** an attentive player earns ~380 coins/min, a casual one (checks every 5 min) ~215. Shops are the biggest income (34–39%), then goals (20–34%), tickets (15–22%), wishes (11–16%) and tasks (3–6%). Sickness only shows up with neglect (~1 case per animal-hour when checking every 5 min). Level-ups give 2 gems. Paws still accumulate faster than they are spent; land expansion (6,000 coins at level 10) is the next sink to check.
+
+**Also new:** a level-up card listing unlocks, confetti, "New" ribbons in the Build menu, Ask Tilda tips (? or H), animal personalities, upgrade-level signs, a storage habitat filter, kids/hats/balloons on visitors, and night-time music.
 
 Done since the first handoff: save export/import, visitor wishes and attraction-seeking visitors, daily tasks, a weekly seasonal festival with laps, vet staff and 5 starting medicine, species calls and toys, day/night, the Coast habitat (seals, otters, sea turtles), two more Dunes animals, undo/cancel-build/restock, keyboard shortcuts, long-press and haptics.
 
