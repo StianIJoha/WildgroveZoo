@@ -54,6 +54,16 @@ const START_MEDICINE = 5;
 const NEED_BASE = { food: 300, water: 240, pet: 420, play: 540 };
 const NEED_LABEL = { food: 'Feed', water: 'Water', pet: 'Pet', play: 'Play' };
 
+// personalities: every animal gets one; `need`/`k` scales that need's interval (below 1 = more often)
+const TRAITS = {
+  playful:  { name: 'Playful',    need: 'play', k: 0.8,  desc: 'Wants to play more often, and loves toys.' },
+  bigeater: { name: 'Big eater',  need: 'food', k: 0.8,  desc: 'Gets hungry sooner than the rest.' },
+  cuddly:   { name: 'Cuddly',     need: 'pet',  k: 0.8,  desc: 'Asks for cuddles more often.' },
+  easy:     { name: 'Easy-going', all: 1.12,            desc: 'Every need lasts a little longer.' },
+  sleepy:   { name: 'Sleepy',                           desc: 'Naps a lot, even during the day.' },
+  explorer: { name: 'Explorer',                         desc: 'Always on the move around the enclosure.' },
+};
+
 // shops earn on a pay period; visitors + zoo meter speed them up
 const SHOPS = {
   feeder:   { name: 'Feeding station', lvl: 1,  cost: 150,  pay: 40,   period: 120,  build: 15 },
@@ -301,5 +311,5 @@ const VISITOR_SKINS = ['#f6d3b3', '#e8b48f', '#c98e64', '#9a6644', '#6e4630'];
 const VISITOR_HAIRS = ['#2b1d14', '#5a3a22', '#c78a3b', '#1d1d1d', '#8a4b2a', '#e0c070'];
 const NAMES = ['Pip', 'Mochi', 'Biscuit', 'Juniper', 'Pebble', 'Clover', 'Nori', 'Waffle', 'Hazel', 'Tofu', 'Maple', 'Ziggy', 'Olive', 'Pickles', 'Rumi', 'Saffron', 'Bean', 'Kiwi', 'Marlo', 'Fig', 'Sunny', 'Bramble', 'Poppy', 'Taro', 'Luna', 'Otis', 'Willow', 'Nugget', 'Cosmo', 'Dot', 'Honey', 'Basil', 'Jasper', 'Mabel', 'Gus', 'Ivy', 'Peanut', 'Ruby', 'Sprout', 'Theo', 'Frida', 'Odin', 'Sigrid', 'Bjørn', 'Tuva'];
 
-return { RANKS, EVENTS, EVENT_POINTS, EVENT_TRACK, BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
+return { TRAITS, RANKS, EVENTS, EVENT_POINTS, EVENT_TRACK, BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
 })();

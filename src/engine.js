@@ -56,6 +56,8 @@ function migrate(s) {
   }
   s.settings = Object.assign({ muted: false, music: true, night: true }, s.settings);
   for (const o of s.objects) if (o.kind === 'enc' && !o.toys) o.toys = [];
+  const traits = Object.keys(G.TRAITS);
+  for (const a of [...s.objects.flatMap(o => o.animals || []), ...s.storage.animals, ...s.objects.flatMap(o => (o.slots || []).map(x => x.rec))]) if (!a.trait) a.trait = traits[Math.floor(rnd() * traits.length)];
   return s;
 }
 function ownedRect(idx) { const e = EXPANSIONS[idx]; return { x0: N - e.ox, y0: N - e.oy }; }
@@ -206,8 +208,15 @@ function dropCard(force) {
 
 // ---------- animals & needs ----------
 function needInterval(sp, n) { return G.NEED_BASE[n] * SPECIES[sp].care; }
-function initNeeds(a, fresh) { a.due = {}; for (const n of NEEDS) a.due[n] = S.clock + needInterval(a.species, n) * (fresh ? 0.15 + rnd() * 0.25 : 0.5 + rnd() * 0.6); }
-function storeRec(species, variant, sex, baby) { return { id: uid++, species, variant, sex, baby: !!baby, grow: baby ? 0 : 1, name: pick(G.NAMES) }; }
+const traitK = (a, n) => { const t = a && G.TRAITS[a.trait]; return !t ? 1 : t.all || (t.need === n ? t.k : 1); };
+function initNeeds(a, fresh) { a.due = {}; for (const n of NEEDS) a.due[n] = S.clock + needInterval(a.species, n) * traitK(a, n) * (fresh ? 0.15 + rnd() * 0.25 : 0.5 + rnd() * 0.6); }
+// a name nobody in the zoo has yet, when there's one left
+function freshName() {
+  if (!S) return pick(G.NAMES);
+  const used = new Set([...S.objects.flatMap(o => (o.animals || []).map(a => a.name)), ...S.storage.animals.map(a => a.name)]);
+  const free = G.NAMES.filter(n => !used.has(n)); return pick(free.length ? free : G.NAMES);
+}
+function storeRec(species, variant, sex, baby) { return { id: uid++, species, variant, sex, baby: !!baby, grow: baby ? 0 : 1, name: freshName(), trait: pick(Object.keys(G.TRAITS)) }; }
 function placeRec(enc, rec) {
   const a = Object.assign({}, rec, { lx: 0.6 + rnd() * (enc.w - 1.2), ly: 0.6 + rnd() * (enc.h - 1.2), tx: null, ty: null, wait: rnd() * 2, flip: rnd() < 0.5, moving: false, phase: rnd() * 10, sick: false });
   initNeeds(a, true);
@@ -216,7 +225,7 @@ function placeRec(enc, rec) {
   enc.animals.push(a);
   return a;
 }
-function toRec(a) { return { id: a.id, species: a.species, variant: a.variant, sex: a.sex, baby: a.baby, grow: a.grow, name: a.name }; }
+function toRec(a) { return { id: a.id, species: a.species, variant: a.variant, sex: a.sex, baby: a.baby, grow: a.grow, name: a.name, trait: a.trait }; }
 const needActive = (a, n) => S.clock >= a.due[n];
 const activeNeeds = a => NEEDS.filter(n => needActive(a, n));
 function mood(e, a) {
@@ -229,8 +238,8 @@ const fitsBiome = (e, species) => SPECIES[species].biome === e.biome;
 function canHold(e, species, variant) { return !e.build && fitsBiome(e, species) && e.animals.length < capOf(e) && (!e.species || (e.species === species && e.variant === variant)); }
 function fulfill(e, a, n, quiet) {
   if (n === 'food') { const f = SPECIES[a.species].food; if (S.food[f] < 1) { if (!quiet) outOfFood(f); return false; } S.food[f]--; }
-  const toyBoost = n === 'play' && e.toys ? 1 + G.TOY_PLAY * e.toys.length : 1;
-  a.due[n] = S.clock + needInterval(a.species, n) * toyBoost * (0.85 + rnd() * 0.3);
+  const toyBoost = n === 'play' && e.toys ? 1 + G.TOY_PLAY * e.toys.length * (a.trait === 'playful' ? 1.5 : 1) : 1;
+  a.due[n] = S.clock + needInterval(a.species, n) * traitK(a, n) * toyBoost * (0.85 + rnd() * 0.3);
   return true;
 }
 function outOfFood(f) { toast(`Out of ${FOODS[f].name.toLowerCase()}. Buy more in Build → Supplies.`, 'warn'); sfx('no'); }
@@ -244,7 +253,7 @@ function careAll(e, n) {
 function careOne(e, a) {
   if (a.sick) return heal(e, a);
   const n = activeNeeds(a)[0];
-  if (!n) { voice(a.species, a.baby); a.heart = 1.2; const p = iso(e.gx + a.lx, e.gy + a.ly); floaters.push({ wx: p.x, wy: p.y - topOf(a) - 14, text: a.name, t: 0, color: '#ffffff' }); return; }
+  if (!n) { voice(a.species, a.baby); a.heart = 1.2; const p = iso(e.gx + a.lx, e.gy + a.ly); floaters.push({ wx: p.x, wy: p.y - topOf(a) - 14, text: a.name + (G.TRAITS[a.trait] ? ' · ' + G.TRAITS[a.trait].name : ''), t: 0, color: '#ffffff' }); return; }
   if (fulfill(e, a, n)) { careReward(iso(e.gx + a.lx, e.gy + a.ly), a.species); sfx(n); voice(a.species, a.baby); dirty(); }
 }
 function heal(e, a) {
@@ -292,14 +301,14 @@ function stepAnimal(e, a, dt) {
   if (a.tx == null) {
     a.wait -= dt; a.moving = false;
     if (a.wait <= 0) {
-      if (DK > 0.7 && !a.baby && rnd() < 0.8) { a.sleep = true; a.wait = 5 + rnd() * 8; return; }
+      if ((DK > 0.7 && !a.baby && rnd() < 0.8) || (a.trait === 'sleepy' && rnd() < 0.3)) { a.sleep = true; a.wait = 5 + rnd() * 8; return; }
       a.sleep = false; a.tx = 0.5 + rnd() * (e.w - 1); a.ty = 0.5 + rnd() * (e.h - 1);
     }
     return;
   }
   const dx = a.tx - a.lx, dy = a.ty - a.ly, d = Math.hypot(dx, dy);
   const spd = sp.speed * (a.baby ? 1.2 : 1) * (a.sick ? 0.4 : 1);
-  if (d < 0.05) { a.tx = null; a.wait = 1.5 + rnd() * 5; a.moving = false; return; }
+  if (d < 0.05) { a.tx = null; a.wait = a.trait === 'explorer' ? 0.4 + rnd() * 1.2 : 1.5 + rnd() * 5; a.moving = false; return; }
   const s = Math.min(d, spd * dt); a.lx += dx / d * s; a.ly += dy / d * s; a.moving = true;
   const sdx = dx - dy; if (Math.abs(sdx) > 0.02) a.flip = sdx < 0;
 }
@@ -1336,7 +1345,7 @@ function encPanel(P, o) {
   const list = el('div', 'animals');
   for (const a of o.animals) {
     const r = el('div', 'animal');
-    r.innerHTML = `<span class="sex ${a.sex}">${a.sex === 'm' ? '♂' : '♀'}</span><span class="nm">${a.name}${a.baby ? ' <small>baby</small>' : ''}</span><span class="needs" data-live="an-${a.id}"></span>`;
+    r.innerHTML = `<span class="sex ${a.sex}">${a.sex === 'm' ? '♂' : '♀'}</span><span class="nm">${a.name}${a.baby ? ' <small>baby</small>' : ''}${G.TRAITS[a.trait] ? ` <em class="trait" title="${G.TRAITS[a.trait].desc}">${G.TRAITS[a.trait].name}</em>` : ''}</span><span class="needs" data-live="an-${a.id}"></span>`;
     const others = S.objects.filter(x => x.kind === 'enc' && x !== o && canHold(x, a.species, a.variant));
     const nurs = S.objects.find(x => x.type === 'nursery' && !x.build);
     if (a.baby && nurs) r.appendChild(btn('mini', 'Nursery', () => { if (nurs.slots.length >= 3) { toast('The nursery is full (3 babies)', 'warn'); return; } o.animals = o.animals.filter(x => x !== a); if (!o.animals.length) o.species = null; nurs.slots.push({ rec: toRec(a) }); toast(`${a.name} went to the nursery`); dirty(); }));
