@@ -383,7 +383,7 @@ let visitors = [], spawnT = 0, floaters = [], litterT = 0;
 function spawnVisitor() {
   if (!nb4(GATE.x, GATE.y).some(([x, y]) => isPath(x, y))) return;
   const v = { gx: GATE.x + 0.5, gy: GATE.y + 0.5, cx: GATE.x, cy: GATE.y, px: -1, py: -1, tx: GATE.x, ty: GATE.y, route: null, dest: null,
-    life: 50 + rnd() * 60, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0, wish: null };
+    life: 50 + rnd() * 60, age: 0, shirt: pick(G.VISITOR_SHIRTS), skin: pick(G.VISITOR_SKINS), hair: pick(G.VISITOR_HAIRS), pause: 0, flip: false, speed: 0.9 + rnd() * 0.5, heart: 0, wish: null, ox: (rnd() - 0.5) * 0.5, oy: (rnd() - 0.5) * 0.5 };
   if (S.tut < 0 && rnd() < 0.3) {
     v.wish = makeWish();
     if (!S.stats.wishHint) { S.stats.wishHint = 1; toast('A visitor has a wish! Tap their thought bubble to see it. Granting wishes earns tips.'); }
@@ -767,7 +767,7 @@ function drawEncGround(e) {
   }
 }
 
-const LIVE_DECOR = new Set(['fountain', 'lamp', 'balloon']);
+const LIVE_DECOR = new Set(['fountain', 'lamp', 'balloon', 'torch', 'blossomtree', 'snowman']);
 const spriteCache = new Map();
 const BOX1 = { ox: 64, oy: 112, w: 128, h: 136 }, BOX2 = { ox: 100, oy: 150, w: 200, h: 190 }, BOX3 = { ox: 120, oy: 120, w: 240, h: 180 };
 const boxFor = type => (type === 'nursery' || type === 'lab' || type === 'safari' || type === 'construction2') ? BOX2 : type === 'construction3' ? BOX3 : BOX1;
@@ -819,7 +819,7 @@ function render() {
     items.push({ d: o.gx + o.gy + o.w, f: () => drawObj(o, c) });
   }
   for (const l of S.litter) { const p = iso(l.x + 0.5 + l.ox, l.y + 0.5 + l.oy); if (on(p.x, p.y)) items.push({ d: l.x + l.y + 0.6, f: () => { ctx.save(); ctx.translate(p.x, p.y); if (ART.decor.litter) ART.decor.litter(ctx, T, l.k); else { ctx.fillStyle = '#eee'; ctx.fillRect(-4, -4, 8, 5); } ctx.restore(); } }); }
-  for (const v of visitors) { const p = iso(v.gx, v.gy); if (on(p.x, p.y)) items.push({ d: v.gx + v.gy, f: () => drawVisitor(v, p) }); }
+  for (const v of visitors) { const p = iso(v.gx + (v.ox || 0), v.gy + (v.oy || 0)); if (on(p.x, p.y)) items.push({ d: v.gx + v.gy, f: () => drawVisitor(v, p) }); }
   for (const p of S.escaped) items.push({ d: p.x + p.y, f: () => { const q = iso(p.x, p.y); ctx.save(); ctx.translate(q.x, q.y); ART.animals.penguin(ctx, T + p.phase, { flip: p.flip, moving: p.moving, sex: p.sex }); ctx.restore(); bubbles.push({ wx: q.x, wy: q.y - 48, icon: 'pet', escaped: p }); } });
   if (tool && hover && !['path', 'bulldoze'].includes(tool.kind)) { const f = footprint(tool); items.push({ d: hover.x + hover.y + f.w + f.h, f: () => drawGhost(hover.x, hover.y) }); }
   items.sort((a, b) => a.d - b.d);
