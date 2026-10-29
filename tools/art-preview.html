@@ -73,6 +73,14 @@ function drawAll(t) {
       safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
       cross(x, base); label(x, base + 16 * n + 14, id + ' (' + n + 'x' + n + ')');
     });
+    // entrance gate with player zoo names (ART.gateLabel; reset to the default afterwards)
+    [null, "Grandma Rosie's Zoo!", 'MMMMMMMMMMMMMMMMMMMMMM'].forEach((nm, i) => {
+      const x = 800 + i * 140, base = y0 + 330;
+      diamond(x, base);
+      safe(() => { ART.gateLabel = nm; ctx.translate(x, base); ART.decor.gate(ctx, t); }, 'gate');
+      ART.gateLabel = null;
+      cross(x, base); label(x, base + 28, 'gate: ' + (nm ? nm.length + ' chars' : 'default'));
+    });
     // coast/park decor + seasonal event decor (1x1), then enrichment toys
     NEWDECOR2.forEach((id, i) => {
       const x = 70 + (i % 8) * 140, base = y0 + 680 + Math.floor(i / 8) * 150;
