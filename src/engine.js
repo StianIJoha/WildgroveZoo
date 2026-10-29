@@ -1998,6 +1998,11 @@ function voice(sp, baby) {
     o.connect(g).connect(master); o.start(t0); o.stop(t0 + len + 0.02);
   }
 }
+function ambience(night, t0) {
+  const chirp = (f0, f1, t, len, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g).connect(master); o.start(t); o.stop(t + len + 0.02); };
+  if (night) { const f = 4200 + rnd() * 600; for (let i = 0; i < 6; i++) chirp(f, f * 1.02, t0 + i * 0.055, 0.035, 0.006); }
+  else { const f = 2200 + rnd() * 1400, n = 2 + Math.floor(rnd() * 3); for (let i = 0; i < n; i++) chirp(f, f * (1.2 + rnd() * 0.4), t0 + i * 0.12, 0.08, 0.008); }
+}
 // gentle marimba-style loop: I–vi–IV–V in C, pentatonic melody
 function startMusic() {
   if (musicT || !AC) return;
@@ -2013,6 +2018,8 @@ function startMusic() {
       if (b === 0) ch.forEach(f => tone(f / 2, next, night ? 2.4 : 1.6, 0.025 * v, 'sine'));
       if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03 * v, night ? 'sine' : 'triangle');
       if (rnd() < (night ? 0.3 : 0.55)) tone(pent[Math.floor(rnd() * pent.length)] / (night ? 2 : 1), next, night ? 0.6 : 0.3, 0.022 * v, night ? 'sine' : 'triangle');
+      // ambience: a bird now and then by day, cricket trills at night
+      if (rnd() < (night ? 0.06 : 0.03)) ambience(night, next + rnd() * 0.2);
       next += night ? 0.4 : 0.28; beat++;
     }
   }, 120);
