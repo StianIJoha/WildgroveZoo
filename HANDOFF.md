@@ -117,7 +117,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 - **Storage:** animals, stored buildings and decor (enclosures keep their level), food and medicine. Everything can be moved, stored, sold or removed.
 - **Goals:** 25 sequential goals with 4 shown at a time.
 - **Daily tasks:** three random tasks from `DAILY` (care, care for one species, shops, litter, dung, wishes, babies, visitors, coins), scaled by level, refreshed every 4 real hours. Progress is a stat delta from when the task was made. Finishing all three pays a bonus. Shown above the goals in the Goals sheet.
-- **Weekly festival:** the theme follows the season (`EVENTS`). Points come from stat deltas since Monday (`EVENT_POINTS`), and fill a 10-step `EVENT_TRACK` with coins, paws, gems, an exclusive decor item and a rare (3rd-degree) animal. Finishing the track starts another lap. First tab of the Zoo hub.
+- **Weekly festival:** the theme follows the season (`EVENTS`). Points come from stat deltas since Monday (`EVENT_POINTS`), and fill a 10-step `EVENT_TRACK` with coins, paws, gems, an exclusive decor item and a rare (3rd-degree) animal. Finishing the track starts another lap; lap n needs n × the points, the star animal is lap 1 only (later: gems) and the decor laps 1–2 only. The theme is fixed by the week's Monday. First tab of the Zoo hub.
 - **Tutorial:** 9 steps with Tilda, opening with three escaped penguins to catch. It can be skipped.
 - **Offline progress:** a welcome-back summary shows ticket income, full shops, babies born and animals needing care.
 - **Audio:** WebAudio synth sound effects, a short call per species (`VOICE`) when you tap or care for an animal, and a generated marimba-style music loop. Sound, music and day/night are saved settings.
@@ -134,7 +134,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 
 ## Improvement ideas (rough priority)
 
-**Balance (from `tests/economy.js`, 45 min, seed 1):** an attentive player earns ~380 coins/min, a casual one (checks every 5 min) ~215. Shops are the biggest income (34–39%), then goals (20–34%), tickets (15–22%), wishes (11–16%) and tasks (3–6%). Sickness only shows up with neglect (~1 case per animal-hour when checking every 5 min). Level-ups give 2 gems. Paws still accumulate faster than they are spent; land expansion (6,000 coins at level 10) is the next sink to check.
+**Balance (from `tests/economy.js`, 45 min, seed 1):** an attentive player earns ~390 coins/min, a casual one (checks every 5 min) ~215. Shops and goals lead, then tickets, the festival (8–13%; about one lap per long session), wishes (~5%) and tasks. Sickness only shows up with neglect (~1 case per animal-hour when checking every 5 min). Level-ups give 2 gems. Paws still accumulate faster than they are spent; land expansion (6,000 coins at level 10) is the next sink to check.
 
 **Also new:** a zoo name (header, page title and gate sign), Take a photo (PNG of the view), weather, ambient birdsong/crickets, a level-up card listing unlocks, confetti, "New" ribbons in the Build menu, Ask Tilda tips (? or H), animal personalities, upgrade-level signs, a storage habitat filter, kids/hats/balloons on visitors, and night-time music.
 

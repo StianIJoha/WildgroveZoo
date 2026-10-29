@@ -843,9 +843,12 @@ async def main():
         async def festival():
             await fresh(pg)
             MON = 1788177600000  # Mon 31 Aug 2026 12:00 UTC (summer)
-            r = await ev(pg, f"""() => {{ window.__setNow({MON}); const g = window.__wg, S = g.S; S.event = null; const E = g.ensureEvent(); S.stats.care += 900;
+            # enough care for the whole first lap, plus the first step of lap 2 (which needs twice the points) and 50 spare
+            TR = await ev(pg, "() => GAME.EVENT_TRACK.map(m => m.at)")
+            PTS, LEFT = TR[-1] + 2 * TR[0] + 50, 2 * TR[0] + 50
+            r = await ev(pg, f"""() => {{ window.__setNow({MON}); const g = window.__wg, S = g.S; S.event = null; const E = g.ensureEvent(); S.stats.care += {PTS};
                 return {{ id: E.id, p: g.eventPoints() }}; }}""")
-            check(r['id'] == 'summer' and r['p'] == 900, f"festival starts ({r['id']}, {r['p']} points from 900 care actions)")
+            check(r['id'] == 'summer' and r['p'] == PTS, f"festival starts ({r['id']}, {r['p']} points from {PTS} care actions)")
             await ev(pg, "() => window.__wg.openHub('event')")
             await pg.wait_for_timeout(200)
             await pg.click('#hubBody .evstep.ready button')
@@ -860,7 +863,7 @@ async def main():
                 const out = { log, items, star, lap: S.event.lap, claimed: S.event.claimed, p: g.eventPoints() }; g.claimEvent(); document.querySelector('#reward').hidden = true; out.extra = S.event.claimed; return out; }""")
             check(r['items'] == 2, f"both decor milestones put the festival decor in storage ({r['items']})")
             check(r['star'] == 1, f"the last milestone puts a rare star animal in storage ({r['star']})")
-            check(r['lap'] == 2 and r['claimed'] == 0 and r['p'] == 50 and r['extra'] == 1, f"after the last milestone lap 2 starts with the leftover points (lap {r['lap']}, claimed {r['claimed']}, points {r['p']}, then claimed {r['extra']})")
+            check(r['lap'] == 2 and r['claimed'] == 0 and r['p'] == LEFT and r['extra'] == 1, f"after the last milestone lap 2 starts with the leftover points (lap {r['lap']}, claimed {r['claimed']}, points {r['p']}, then claimed {r['extra']})")
             r = await ev(pg, f"""() => {{ const g = window.__wg, S = g.S; window.__setNow({MON} + 7 * 86400000); const E = g.ensureEvent(); const out = {{ lap: E.lap, claimed: E.claimed, p: g.eventPoints() }}; return out; }}""")
             check(r['lap'] == 1 and r['claimed'] == 0 and r['p'] == 0, f"a new week resets the festival ({r})")
             # a season change in the middle of a week must not wipe the week's progress

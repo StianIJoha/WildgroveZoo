@@ -403,8 +403,9 @@ const rankOf = stars => { let r = 0; G.RANKS.forEach((k, i) => { if (stars >= k.
 function checkRank() {
   if (S.tut >= 0) return;
   const r = rankOf(M.attraction); if (r <= (S.stats.rank || 0)) return;
-  S.stats.rank = r; const R = G.RANKS[r]; S.gems += R.gems || 0;
-  toast(`Your zoo is now a ${R.name}! +${R.gems} gems`, 'level'); sfx('level'); dirty();
+  let gems = 0; for (let i = (S.stats.rank || 0) + 1; i <= r; i++) gems += G.RANKS[i].gems || 0;
+  S.stats.rank = r; const R = G.RANKS[r]; S.gems += gems;
+  toast(`Your zoo is now a ${R.name}! +${gems} gems`, 'level'); sfx('level'); dirty();
 }
 const ticketPrice = () => 1 + Math.floor(S.level / 3);
 
@@ -1267,7 +1268,7 @@ function updateHUD() {
   $('#coins').textContent = fmt(S.coins); $('#gems').textContent = S.gems; $('#paws').textContent = S.paws;
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
-  $('#rankName').textContent = G.RANKS[S.stats.rank || 0].name;
+  $('#rankName').textContent = $('#rankMini').textContent = G.RANKS[S.stats.rank || 0].name;
   const zn = S.settings.zooName || 'Wildgrove';
   if ($('#zooName').textContent !== zn) {
     $('#zooName').textContent = zn; document.title = zn === 'Wildgrove' ? 'Wildgrove Zoo' : `${zn} · Wildgrove Zoo`;
@@ -1635,8 +1636,9 @@ function renderStorage() {
   if (storageTab === 'animals') {
     if (!S.storage.animals.length) box.appendChild(el('p', 'empty', 'No animals in storage. Animals from the wheel, the safari, the nursery and the lab arrive here.'));
     const biomes = [...new Set(S.storage.animals.map(r => SPECIES[r.species].biome))];
-    if (storeFilter && !biomes.includes(storeFilter)) storeFilter = null;
-    if (biomes.length > 1 && S.storage.animals.length > 5) {
+    const showFilter = biomes.length > 1 && S.storage.animals.length > 5;
+    if (storeFilter && (!showFilter || !biomes.includes(storeFilter))) storeFilter = null;
+    if (showFilter) {
       const fr = el('div', 'row wrap filters');
       fr.appendChild(sbtn('mini' + (!storeFilter ? ' on' : ''), `All ${S.storage.animals.length}`, () => { storeFilter = null; }));
       for (const b of biomes) fr.appendChild(sbtn('mini' + (storeFilter === b ? ' on' : ''), `${BIOMES[b].name} ${S.storage.animals.filter(r => SPECIES[r.species].biome === b).length}`, () => { storeFilter = storeFilter === b ? null : b; }));
@@ -1737,7 +1739,8 @@ function renderQuests(force) {
 function weekStart(now) { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.getTime(); }
 function ensureEvent() {
   if (S.tut >= 0) return null;
-  const m = new Date().getMonth(), id = Object.keys(G.EVENTS).find(k => G.EVENTS[k].months.includes(m)), wk = weekStart(Date.now());
+  // the theme is fixed by the week's Monday, so a new month mid-week doesn't wipe progress
+  const wk = weekStart(Date.now()), m = new Date(wk).getMonth(), id = Object.keys(G.EVENTS).find(k => G.EVENTS[k].months.includes(m));
   if (!S.event || S.event.id !== id || S.event.week !== wk) {
     const base = {}; for (const k in G.EVENT_POINTS) base[k] = S.stats[k] || 0;
     S.event = { id, week: wk, base, lap: 1, claimed: 0, spent: 0 };
@@ -1746,22 +1749,30 @@ function ensureEvent() {
 }
 function eventPoints() { const E = S.event; let p = 0; for (const k in G.EVENT_POINTS) p += G.EVENT_POINTS[k] * Math.max(0, (S.stats[k] || 0) - (E.base[k] || 0)); return p - E.spent; }
 const eventEnds = () => S.event.week + 7 * 86400000;
-function eventReady() { if (!ensureEvent()) return 0; const p = eventPoints(); let n = 0; for (let i = S.event.claimed; i < G.EVENT_TRACK.length && p >= G.EVENT_TRACK[i].at; i++) n++; return n; }
+// later laps need more points (lap n: n × the base track) and swap the one-off prizes for plainer ones
+const stepAt = i => G.EVENT_TRACK[i].at * S.event.lap;
+function stepReward(i) {
+  const r = Object.assign({}, G.EVENT_TRACK[i].reward);
+  if (S.event.lap > 1 && r.star) { delete r.star; r.gems = (r.gems || 0) + 2; }
+  if (S.event.lap > 2 && r.decor) { delete r.decor; r.coins = (r.coins || 0) + 500; }
+  return r;
+}
+function eventReady() { if (!ensureEvent()) return 0; const p = eventPoints(); let n = 0; for (let i = S.event.claimed; i < G.EVENT_TRACK.length && p >= stepAt(i); i++) n++; return n; }
 function rewardText(r, ev) { const out = []; if (r.coins) out.push(`${fmt(r.coins)} coins`); if (r.gems) out.push(`${r.gems} gem${r.gems > 1 ? 's' : ''}`); if (r.paws) out.push(`${r.paws} paws`); if (r.food) out.push(`${r.food} food`); if (r.medicine) out.push(`${r.medicine} medicine`); if (r.card) out.push('a card'); if (r.decor) out.push(DECOR[ev.decor].name); if (r.star) out.push(`a rare ${SPECIES[ev.star].name.toLowerCase()}`); return out.join(' + '); }
 function claimEvent() {
   const E = S.event, ev = G.EVENTS[E.id], m = G.EVENT_TRACK[E.claimed];
-  if (!m || eventPoints() < m.at) return;
-  const r = Object.assign({}, m.reward), parts = [];
+  if (!m || eventPoints() < stepAt(E.claimed)) return;
+  const r = stepReward(E.claimed), parts = [];
   if (r.decor) { S.storage.items.push({ kind: 'deco', type: ev.decor, w: 1, h: 1 }); parts.push(`a ${DECOR[ev.decor].name.toLowerCase()} (in storage)`); delete r.decor; }
   if (r.star) { const a = storeRec(ev.star, 2, rnd() < 0.5 ? 'm' : 'f', false); S.storage.animals.push(a); parts.push(`${a.name} the ${VNAME(ev.star, 2)} (in storage)`); delete r.star; }
   parts.push(...grant(r));
   E.claimed++;
-  if (E.claimed >= G.EVENT_TRACK.length) { E.spent += G.EVENT_TRACK[G.EVENT_TRACK.length - 1].at; E.claimed = 0; E.lap++; parts.push(`Lap ${E.lap} begins!`); }
+  if (E.claimed >= G.EVENT_TRACK.length) { E.spent += stepAt(G.EVENT_TRACK.length - 1); E.claimed = 0; E.lap++; parts.push(`Lap ${E.lap} begins!`); }
   sfx('level'); showReward(`${ev.name} reward`, parts); dirty();
 }
 function renderEvent(box) {
   const E = ensureEvent(); if (!E) { box.appendChild(el('p', 'empty', 'Finish the tutorial to join the festival.')); return; }
-  const ev = G.EVENTS[E.id], p = eventPoints(), T2 = G.EVENT_TRACK, top = T2[T2.length - 1].at;
+  const ev = G.EVENTS[E.id], p = eventPoints(), T2 = G.EVENT_TRACK, top = stepAt(T2.length - 1);
   const head = el('div', 'evhead'); head.style.setProperty('--ev', ev.color);
   head.appendChild(iconCanvas(ev.decor, 64, 'decor'));
   head.appendChild(el('div', '', `<div class="eyebrow">Weekly festival · lap ${E.lap}</div><h3>${ev.name}</h3><div class="sub">${ev.blurb} Ends in ${fmtTime((eventEnds() - Date.now()) / 1000)}.</div>`));
@@ -1769,9 +1780,9 @@ function renderEvent(box) {
   box.appendChild(el('div', 'evbar', `<i><b style="width:${Math.min(100, p / top * 100)}%;background:${ev.color}"></b></i><span><b>${fmt(p)}</b> / ${fmt(top)} festival points</span>`));
   const list = el('div', 'evtrack');
   T2.forEach((m, i) => {
-    const got = i < E.claimed, ready = !got && p >= m.at, next = i === E.claimed;
+    const got = i < E.claimed, ready = !got && p >= stepAt(i), next = i === E.claimed, rw = stepReward(i);
     const row = el('div', 'evstep' + (got ? ' got' : ready ? ' ready' : ''));
-    row.innerHTML = `<span class="evat">${m.at}</span><span class="evrw">${m.reward.decor || m.reward.star ? '<b>' : ''}${rewardText(m.reward, ev)}${m.reward.decor || m.reward.star ? '</b>' : ''}</span>`;
+    row.innerHTML = `<span class="evat">${stepAt(i)}</span><span class="evrw">${rw.decor || rw.star ? '<b>' : ''}${rewardText(rw, ev)}${rw.decor || rw.star ? '</b>' : ''}</span>`;
     if (got) row.appendChild(el('span', 'evok', '✓'));
     else if (ready && next) row.appendChild(hbtn('mini gold', 'Claim', claimEvent));
     list.appendChild(row);

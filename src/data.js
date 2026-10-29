@@ -122,16 +122,16 @@ const EVENTS = {
 const EVENT_POINTS = { care: 1, litter: 1, dung: 1, shopCollects: 3, wishes: 4, babies: 8 };
 // reward 'decor' is the event's decor; 'star' is a rare (3rd-degree) animal of the event's star species
 const EVENT_TRACK = [
-  { at: 15,  reward: { coins: 200 } },
-  { at: 40,  reward: { paws: 3 } },
-  { at: 80,  reward: { food: 25, medicine: 2 } },
-  { at: 130, reward: { decor: 1 } },
-  { at: 200, reward: { coins: 600, gems: 1 } },
-  { at: 280, reward: { paws: 6, card: 1 } },
-  { at: 380, reward: { decor: 1, gems: 1 } },
-  { at: 500, reward: { coins: 1500, paws: 8 } },
-  { at: 650, reward: { gems: 3 } },
-  { at: 850, reward: { star: 1 } },
+  { at: 45,  reward: { coins: 200 } },
+  { at: 120,  reward: { paws: 3 } },
+  { at: 240,  reward: { food: 25, medicine: 2 } },
+  { at: 390, reward: { decor: 1 } },
+  { at: 600, reward: { coins: 600, gems: 1 } },
+  { at: 840, reward: { paws: 6, card: 1 } },
+  { at: 1140, reward: { decor: 1, gems: 1 } },
+  { at: 1500, reward: { coins: 1500, paws: 8 } },
+  { at: 1950, reward: { gems: 3 } },
+  { at: 2550, reward: { star: 1 } },
 ];
 
 // enrichment toys placed inside an enclosure: each adds mood and makes the play need last longer
