@@ -1204,6 +1204,7 @@ const ART = (function () {
   function faceRect(ctx, A, B, s0, s1, z0, z1) { quad(ctx, [fp(A, B, s0, z0), fp(A, B, s1, z0), fp(A, B, s1, z1), fp(A, B, s0, z1)]); }
 
   const decor = {};
+  let gateLabel = 'WILDGROVE';                         // zoo name on the entrance gate sign (ART.gateLabel)
   function wrapDecor(fn) { return function (ctx, t) { ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; fn(ctx, t || 0); ctx.restore(); }; }
 
   decor.oak = wrapDecor((ctx, t) => {
@@ -1464,17 +1465,23 @@ const ART = (function () {
     // hanging chains
     ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-17, -61); ctx.lineTo(-17, -56); ctx.moveTo(17, -61); ctx.lineTo(17, -56); ctx.stroke();
-    // sign board
+    // sign board: text from ART.gateLabel; long names shrink the font, then widen the board (max ±46, inside BOX1)
     const sw = Math.sin(t * 1.5) * 0.015;
+    const label = String(gateLabel).toUpperCase();
+    const FONT = (f) => '900 ' + f + 'px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif';
+    ctx.font = FONT(8.5);
+    let fs = 8.5, W = 27; const mw = ctx.measureText(label).width;
+    if (mw > 44) {
+      fs = 8.5 * 44 / mw;
+      if (fs < 5.6) { W = Math.min(46, mw * 5.6 / 8.5 / 2 + 5); fs = 8.5 * (W * 2 - 10) / mw; }
+    }
     ctx.save(); ctx.translate(0, -62); ctx.rotate(sw);
-    rrect(ctx, -27, -4, 54, 14, 5); paint(ctx, '#3f8f5a', '#24583a', 1.6);
-    rrect(ctx, -25, -2.2, 50, 10.4, 4); ctx.strokeStyle = '#f3e5c0'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.font = '900 8.5px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif';
+    rrect(ctx, -W, -4, W * 2, 14, 5); paint(ctx, '#3f8f5a', '#24583a', 1.6);
+    rrect(ctx, -W + 2, -2.2, W * 2 - 4, 10.4, 4); ctx.strokeStyle = '#f3e5c0'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.font = fs === 8.5 ? FONT(8.5) : FONT(fs.toFixed(2));
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    let fs = 8.5; const mw = ctx.measureText('WILDGROVE').width;
-    if (mw > 44) { fs = 8.5 * 44 / mw; ctx.font = '900 ' + fs.toFixed(2) + 'px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif'; }
-    ctx.lineWidth = 2.2; ctx.strokeStyle = '#24583a'; ctx.strokeText('WILDGROVE', 0, 3.4);
-    ctx.fillStyle = '#fff4d6'; ctx.fillText('WILDGROVE', 0, 3.2);
+    ctx.lineWidth = fs < 6 ? 1.6 : 2.2; ctx.strokeStyle = '#24583a'; ctx.strokeText(label, 0, 3.4);
+    ctx.fillStyle = '#fff4d6'; ctx.fillText(label, 0, 3.2);
     ctx.restore();
     // leafy crest
     cloud(ctx, [[0, -75, 4.2], [-5, -73, 3.2], [5, -73, 3.2]], '#5bb85a', '#2f6e33');
@@ -3691,5 +3698,9 @@ const ART = (function () {
     camel: ['Dromedary camel', 'Dark dromedary', 'Pale dromedary', 'Black camel', 'Festival camel']
   };
 
-  return { animals: animals, decor: decor, person: person, icons: icons, guide: guide, wheel: wheel, variantNames: variantNames };
+  return {
+    animals: animals, decor: decor, person: person, icons: icons, guide: guide, wheel: wheel, variantNames: variantNames,
+    get gateLabel() { return gateLabel; },
+    set gateLabel(v) { v = v == null ? '' : String(v).trim(); gateLabel = v || 'WILDGROVE'; }
+  };
 })();
