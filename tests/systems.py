@@ -21,22 +21,16 @@ def check(cond, msg):
 check.failed = False
 
 
-# Deterministic Math.random (the engine grabs Math.random once at load), plus an optional
-# "rewind the save's savedAt" hook used by the offline-progress test: it runs before the game
-# boots, after the old page's pagehide save, so the rewind is not overwritten.
+# Deterministic Math.random (the engine grabs Math.random once at load), plus a fake clock
+# (__setNow / __resetNow) for the weekly festival tests. The engine looks up the global Date on
+# every call, so swapping window.Date moves the game's real-time clock.
 INIT = """
 (() => {
   let x = 123456789;
   Math.random = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; };
-  try {
-    const back = +sessionStorage.getItem('wg.rewind');
-    if (back) {
-      sessionStorage.removeItem('wg.rewind');
-      const s = JSON.parse(localStorage.getItem('wildgrove.save.v2'));
-      s.savedAt -= back * 1000; localStorage.setItem('wildgrove.save.v2', JSON.stringify(s));
-      window.__rewound = (Date.now() - s.savedAt) / 1000;
-    }
-  } catch (e) {}
+  const R = Date;
+  window.__setNow = ms => { class F extends R { constructor(...a) { if (a.length) super(...a); else super(ms); } static now() { return ms; } } window.Date = F; };
+  window.__resetNow = () => { window.Date = R; };
 })();
 """
 
@@ -490,9 +484,11 @@ async def main():
         # ---------------------------------------------------------------- offline progress
         async def offline():
             await fresh(pg)
-            await ev(pg, """() => { const S = window.__wg.S; for (const o of S.objects) if (o.kind === 'shop') o.prog = 0; window.__wg.save(); }""")
-            c0 = await ev(pg, "() => window.__wg.S.coins")
-            await ev(pg, "() => sessionStorage.setItem('wg.rewind', '3600')")
+            # save, move savedAt an hour back, and stop this page from saving again before the reload
+            # (all in one synchronous step, so no autosave or pagehide save can slip in between)
+            c0 = await ev(pg, """() => { const g = window.__wg, S = g.S; for (const o of S.objects) if (o.kind === 'shop') o.prog = 0; g.save();
+                const s = JSON.parse(localStorage.getItem('wildgrove.save.v2')); s.savedAt -= 3600 * 1000;
+                localStorage.setItem('wildgrove.save.v2', JSON.stringify(s)); Storage.prototype.setItem = () => {}; window.__rewound = 3600; return s.coins; }""")
             await pg.reload()
             try:
                 await pg.wait_for_selector('#welcome', state='visible', timeout=5000)
@@ -570,6 +566,355 @@ async def main():
             await pg.keyboard.press('Control+z')
             check(await ev(pg, "() => (window.__wg.S.coins - window.__wg.S.stats.earned)") == r['coins'], 'undo after a reset refunds nothing')
         await section('reset', reset)
+
+        # ================================================================ second pass: newer features
+
+        # ---------------------------------------------------------------- level-up card
+        async def level_card():
+            await fresh(pg)
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; S.clock = 900 * 5 + 90; g.tick(0.01);   // daytime
+                const l0 = S.level, gem0 = S.gems; let need = -S.xp; for (let l = l0; l < l0 + 3; l++) need += Math.round(50 * Math.pow(l, 1.55));
+                g.addXp(need);
+                const unl = [...Object.values(GAME.SPECIES), ...Object.values(GAME.BIOMES), ...Object.values(GAME.SHOPS), ...Object.values(GAME.BUILDINGS)].filter(d => d.lvl > l0 && d.lvl <= l0 + 3).length;
+                return { l0, level: S.level, dg: S.gems - gem0, vis: !document.querySelector('#levelUp').hidden, num: document.querySelector('#lvNum').textContent,
+                         gems: document.querySelector('#lvGems').textContent, cards: document.querySelectorAll('#levelUp .unlock').length, unl }; }""")
+            check(r['level'] == r['l0'] + 3 and r['vis'], f"three level-ups stack into one level-up card (level {r['l0']} → {r['level']})")
+            check(r['num'] == str(r['level']) and r['gems'] == str(r['dg']) and r['dg'] > 0, f"level card shows the final level and the gems of all three levels (card: level {r['num']}, +{r['gems']} gems; paid {r['dg']})")
+            check(r['cards'] >= r['unl'], f"level card lists the unlocks of every level gained ({r['cards']} cards, {r['unl']} unlocked species/habitats/shops/buildings)")
+            await pg.click('#levelOk')
+            check(not await pg.is_visible('#levelUp'), 'Let\'s build closes the level card')
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, gem0 = S.gems; g.addXp(Math.round(50 * Math.pow(S.level, 1.55)) - S.xp);
+                return { gems: document.querySelector('#lvGems').textContent, dg: S.gems - gem0 }; }""")
+            check(r['gems'] == str(r['dg']), f"a new card after closing counts only the new level's gems ({r['gems']} shown, {r['dg']} paid)")
+            await pg.click('#levelOk')
+            # confetti: counted as rotated fillRect calls on the world canvas (nothing else draws rotated rects)
+            r = await ev(pg, """async () => { const g = window.__wg, S = g.S, cv = document.getElementById('world'); let n = 0;
+                const P = CanvasRenderingContext2D.prototype, f = P.fillRect;
+                P.fillRect = function (...a) { if (this.canvas === cv) { const t = this.getTransform(); if (Math.abs(t.b) > 1e-3 && Math.abs(t.c) > 1e-3) n++; } return f.apply(this, a); };
+                const wait = ms => new Promise(r => setTimeout(r, ms));
+                await wait(300); const before = n; n = 0;
+                g.addXp(Math.round(50 * Math.pow(S.level, 1.55)) - S.xp); await wait(300); const after = n; P.fillRect = f;
+                document.querySelector('#levelOk').click(); return { before, after, dk: g.DK }; }""")
+            check(r['after'] > r['before'] + 30, f"level-up confetti is drawn in daylight (rotated rects: {r['before']} before, {r['after']} after; darkness {r['dk']})")
+            # never during the tutorial
+            await fresh(pg, tutorial=True)
+            r = await ev(pg, "() => { const g = window.__wg; g.addXp(60); return { level: g.S.level, vis: !document.querySelector('#levelUp').hidden }; }")
+            check(r['level'] == 2 and not r['vis'], 'no level card during the tutorial (a toast instead)')
+        await section('level-up card', level_card)
+
+        # ---------------------------------------------------------------- Build "New" ribbons
+        async def build_new():
+            await fresh(pg)    # SETUP jumps to level 12, so everything from levels 2..12 is unseen
+            await pg.wait_for_timeout(400)
+            r = await ev(pg, "() => ({ badge: document.querySelector('#buildBadge').hidden ? 0 : +document.querySelector('#buildBadge').textContent })")
+            check(r['badge'] > 5, f"Build badge counts unseen unlocks ({r['badge']})")
+            await pg.click('#btnShop')
+            n_new = len(await pg.query_selector_all('#shopGrid .card.new'))
+            exp = await ev(pg, "() => Object.values(GAME.BIOMES).filter(b => b.lvl > 1 && b.lvl <= window.__wg.S.level).length")
+            check(n_new == exp, f"Enclosures tab ribbons every newly unlocked habitat ({n_new} of {exp})")
+            await pg.wait_for_timeout(400)
+            b2 = await ev(pg, "() => document.querySelector('#buildBadge').hidden ? 0 : +document.querySelector('#buildBadge').textContent")
+            check(b2 == r['badge'] - exp, f"viewing a tab clears its items from the badge ({r['badge']} → {b2})")
+            await pg.click('#shopTabs .tab >> text=Enclosures')
+            check(len(await pg.query_selector_all('#shopGrid .card.new')) == 0, 'seen items lose the New ribbon')
+            for t in ['Shops', 'Buildings', 'Decor']:
+                await pg.click(f'#shopTabs .tab >> text={t}')
+            await pg.wait_for_timeout(400)
+            check(await pg.is_hidden('#buildBadge'), 'badge disappears once every tab was viewed')
+            await pg.click('#shop [data-close]')
+            # an old save without seenBuild must not show its whole catalogue as new
+            r = await ev(pg, """() => { const g = window.__wg; const s = g.parseSave(g.exportCode()); s.level = 12; delete s.seenBuild;
+                const s2 = g.parseSave(JSON.stringify(s)); g.loadState(s2); return document.querySelector('#buildBadge').hidden; }""")
+            check(r, 'an old save (no seenBuild) shows no New badge')
+            r = await ev(pg, "() => { const g = window.__wg, S = g.S; g.addXp(Math.round(50 * Math.pow(S.level, 1.55)) - S.xp); g.addXp(0); return { lvl: S.level }; }")
+            await pg.wait_for_timeout(400)
+            await dismiss_level_up(pg)
+            badge = await ev(pg, "() => document.querySelector('#buildBadge').hidden ? 0 : +document.querySelector('#buildBadge').textContent")
+            check(badge >= 1, f"reaching level {r['lvl']} badges what it unlocked ({badge})")
+        await section('build new ribbons', build_new)
+
+        # ---------------------------------------------------------------- Ask Tilda
+        NEUTRAL = """() => { const g = window.__wg, S = g.S; S.claimed = GAME.QUESTS.map(q => q.id); g.ensureTasks(); for (const t of S.tasks.list) t.claimed = true; S.tasks.bonus = true;
+            const E = g.ensureEvent(); for (const k in E.base) E.base[k] = S.stats[k] || 0; E.spent = 0; E.claimed = 0;
+            for (const o of S.objects) if (o.kind === 'shop') o.prog = 0; S.medicine = 10; for (const f in S.food) S.food[f] = 500; S.storage.animals = []; S.storage.items = [];
+            for (const e of S.objects) if (e.kind === 'enc') for (const a of e.animals) { a.sick = false; for (const n in a.due) a.due[n] = S.clock + 1e5; } g.computeMeter(); }"""
+        CASES = [
+            ('sick without medicine', "S.objects.find(o => o.kind === 'enc').animals[0].sick = true; S.medicine = 0;", 'short on medicine', True),
+            ('sick with medicine', "S.objects.find(o => o.kind === 'enc').animals[0].sick = true;", 'red medicine bubble', False),
+            ('low food', "S.food.hay = 0;", 'nearly out of hay', True),
+            ('unconnected enclosure', "g.setTool({ kind: 'enc', biome: 'meadow' }); g.place(17, 17); g.setTool(null); const e = S.objects.find(o => o.gx === 17 && o.gy === 17); e.build = S.clock; g.tick(0.01); g.adopt(e, 'bunny', 'm', 0); g.adopt(e, 'bunny', 'f', 0); for (const a of e.animals) for (const n in a.due) a.due[n] = S.clock + 1e5; g.rebuild();", "can't reach", True),
+            ('full shop', "S.objects.find(o => o.kind === 'shop').prog = 1;", 'is full', False),
+            ('empty enclosure + fitting storage', "g.setTool({ kind: 'enc', biome: 'meadow' }); g.place(17, 17); g.setTool(null); S.objects.find(o => o.gx === 17 && o.gy === 17).build = S.clock; g.tick(0.01); S.storage.animals.push(g.storeRec('bunny', 0, 'f', false));", 'in storage would fit', True),
+            ('animal in storage with no habitat', "S.storage.animals.push(g.storeRec('penguin', 0, 'f', false));", 'waiting in storage', True),
+            ('rewards ready', "S.claimed = S.claimed.filter(id => id !== 'g1');", 'waiting in Goals', True),
+            ('low meter part', "for (const e of S.objects) if (e.kind === 'enc') for (const a of e.animals) for (const n in a.due) a.due[n] = S.clock - 1; g.computeMeter();", 'Zoo meter', False),
+        ]
+        async def tilda():
+            for name, js, want, has_go in CASES:
+                await fresh(pg)
+                await ev(pg, NEUTRAL)
+                r = await ev(pg, "() => { const g = window.__wg, S = g.S; " + js + " g.computeMeter(); const t = g.advice(); return { text: t.text, go: !!t.go }; }")
+                check(want in r['text'] and r['go'] == has_go, f"Tilda's tip for {name}: \"{r['text'][:70]}…\" (Show me: {r['go']})")
+            # UI: H opens the tip, Show me navigates, Close closes; hidden in the tutorial
+            await fresh(pg)
+            await ev(pg, NEUTRAL)
+            await ev(pg, "() => { const S = window.__wg.S; S.objects.find(o => o.kind === 'enc').animals[0].sick = true; S.medicine = 0; }")
+            await pg.wait_for_timeout(400)
+            check(await pg.is_visible('#btnHelp'), 'Ask Tilda button shows after the tutorial')
+            await pg.mouse.move(5, 400)
+            await pg.keyboard.press('h')
+            await pg.wait_for_timeout(200)
+            r = await ev(pg, "() => ({ vis: !document.querySelector('#tutorial').hidden, step: document.querySelector('#tutStep').textContent, skip: document.querySelector('#tutSkip').textContent, ok: document.querySelector('#tutOk').hidden ? null : document.querySelector('#tutOk').textContent, text: document.querySelector('#tutText').textContent })")
+            check(r['vis'] and r['step'] == 'Tip' and r['skip'] == 'Close' and r['ok'] == 'Show me' and 'medicine' in r['text'], f'H opens a tip with Close and Show me ({r})')
+            await pg.wait_for_timeout(700)
+            check(await pg.is_visible('#tutorial'), 'the tip stays open (the tutorial check does not hide it)')
+            await pg.click('#tutOk')
+            await pg.wait_for_timeout(200)
+            check(await pg.is_visible('#shop') and await pg.is_visible('.supply.restock, .supply') and not await pg.is_visible('#tutorial'), 'Show me opens Build → Supplies and closes the tip')
+            await pg.click('#shop [data-close]')
+            await pg.click('#btnHelp')
+            await pg.click('#tutSkip')
+            await pg.wait_for_timeout(500)
+            check(not await pg.is_visible('#tutorial'), 'Close closes the tip and it stays closed')
+            # start a new zoo right after using a tip: the tutorial card must be the real tutorial
+            await pg.click('#btnHelp')
+            await ev(pg, "() => window.__wg.openHub('office')")
+            await pg.wait_for_timeout(750)
+            await pg.click('#hubBody button:has-text("Start a new zoo")')
+            await pg.click('#resetYes')
+            await pg.wait_for_timeout(500)
+            r = await ev(pg, "() => ({ vis: !document.querySelector('#tutorial').hidden, step: document.querySelector('#tutStep').textContent, skip: document.querySelector('#tutSkip').textContent, okHidden: document.querySelector('#tutOk').hidden, okText: document.querySelector('#tutOk').textContent, text: document.querySelector('#tutText').textContent.slice(0, 20), help: document.querySelector('#btnHelp').hidden })")
+            check(r['vis'] and r['step'].startswith('1 /') and r['skip'] == 'Skip tutorial' and r['okHidden'] and r['okText'] == "Let's go" and r['text'].startswith('Welcome'), f'after a tip, a new zoo shows the real tutorial card ({r})')
+            check(r['help'], 'Ask Tilda is hidden during the tutorial')
+            await pg.keyboard.press('h')
+            await pg.wait_for_timeout(200)
+            check((await pg.inner_text('#tutStep')).startswith('1 /'), 'H does nothing during the tutorial')
+            await pg.click('#tutSkip')
+            await pg.wait_for_timeout(300)
+            check(not await pg.is_visible('#tutorial') and await ev(pg, "() => window.__wg.S.tut") == -1, 'Skip tutorial still skips after a tip was used')
+        await section('ask tilda', tilda)
+
+        # ---------------------------------------------------------------- traits & names
+        async def traits():
+            ids = await fresh(pg)
+            r = await ev(pg, """() => { const g = window.__wg; const s = g.parseSave(g.exportCode());
+                const raw = JSON.parse(JSON.stringify(s)); for (const o of raw.objects) for (const a of o.animals || []) delete a.trait;
+                raw.storage.animals.push({ id: 9001, species: 'bunny', variant: 0, sex: 'm', baby: false, grow: 1, name: 'Old' });
+                g.loadState(g.parseSave(JSON.stringify(raw)));
+                const all = [...g.S.objects.flatMap(o => o.animals || []), ...g.S.storage.animals];
+                return all.every(a => GAME.TRAITS[a.trait]); }""")
+            check(r, 'migration gives every animal (enclosures and storage) a trait')
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.kind === 'enc'), a = e.animals[0];
+                e.toys = ['toyBall', 'toyLog']; let lo = 1e9;
+                for (const tr of ['playful', 'easy']) { a.trait = tr; let m = 1e9; for (let i = 0; i < 40; i++) { a.due.play = S.clock - 1; g.careAll(e, 'play'); m = Math.min(m, a.due.play - S.clock); } if (tr === 'playful') lo = m; else return { playful: lo, easy: m }; } }""")
+            check(r['playful'] > 540 * 0.9 * 0.8 * 1.5 * 0.85, f"Playful animals still get a long playtime from toys ({r['playful']:.0f}s minimum, Easy-going {r['easy']:.0f}s)")
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.kind === 'enc');
+                const [x, s] = e.animals; x.trait = 'explorer'; s.trait = 'sleepy'; const p0 = [x.lx, x.ly];
+                let moved = 0, slept = 0; S.clock = 900 * 9 + 50;
+                for (let i = 0; i < 1200; i++) { g.tick(0.05); if (x.moving) moved++; if (s.sleep) slept++; }
+                const inside = e.animals.every(a => isFinite(a.lx) && isFinite(a.ly) && a.lx >= 0 && a.ly >= 0 && a.lx <= e.w && a.ly <= e.h);
+                return { moved, slept, inside, dk: g.DK }; }""")
+            check(r['inside'] and r['moved'] > 400, f"Explorer keeps moving and stays inside the fence ({r['moved']}/1200 moving ticks)")
+            check(r['slept'] > 0, f"Sleepy naps during the day ({r['slept']} sleeping ticks, darkness {r['dk']})")
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; S.storage.animals = [];
+                for (let i = 0; i < 30; i++) S.storage.animals.push(g.storeRec('bunny', 0, 'f', false));
+                const names = [...S.objects.flatMap(o => o.animals || []), ...S.storage.animals].map(a => a.name); return { n: names.length, u: new Set(names).size }; }""")
+            check(r['n'] == r['u'], f"new animals get unique names ({r['u']} unique of {r['n']})")
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.kind === 'enc'); S.storage.animals = [];
+                for (const a of e.animals) S.storage.animals.push(...[]); const names = new Set(e.animals.map(a => a.name));
+                // babies: breed many times into a big enclosure and check names stay unique while names are left
+                e.level = 4; for (const a of e.animals) { a.sick = false; for (const n in a.due) a.due[n] = S.clock + 1e6; }
+                for (let i = 0; i < 4; i++) { e.breed = 0.9999; g.tick(1); for (const a of e.animals) for (const n in a.due) a.due[n] = S.clock + 1e6; }
+                const nm = e.animals.map(a => a.name); return { n: nm.length, u: new Set(nm).size }; }""")
+            check(r['n'] == r['u'], f"babies born in the zoo get unique names ({r['u']} unique of {r['n']})")
+            await ev(pg, "(id) => window.__wg.select(window.__wg.S.objects.find(o => o.id === id))", ids['enc'])
+            await pg.wait_for_timeout(200)
+            check(len(await pg.query_selector_all('#panel .trait')) >= 2, 'the enclosure panel shows each animal\'s trait')
+        await section('traits & names', traits)
+
+        # ---------------------------------------------------------------- storage habitat filter
+        async def storage_filter():
+            await fresh(pg)
+            await ev(pg, """() => { const g = window.__wg, S = g.S; S.storage.animals = [];
+                for (let i = 0; i < 4; i++) S.storage.animals.push(g.storeRec('bunny', 0, i % 2 ? 'm' : 'f', false));
+                for (let i = 0; i < 2; i++) S.storage.animals.push(g.storeRec('penguin', 0, i % 2 ? 'm' : 'f', false)); }""")
+            await pg.click('#btnStorage')
+            await pg.wait_for_timeout(200)
+            btns = await pg.query_selector_all('#storageBody .filters button')
+            check(len(btns) == 3, f'storage with 6 animals in 2 habitats shows All + 2 habitat filters ({len(btns)})')
+            await pg.click('#storageBody .filters button:has-text("Ice floe")')
+            await pg.wait_for_timeout(150)
+            rows = await pg.query_selector_all('#storageBody > .pick')
+            check(len(rows) == 2, f'Ice floe filter shows only the 2 penguins ({len(rows)})')
+            # selling one penguin drops the total to 5: the filter row disappears, so the filter must too
+            await pg.click('#storageBody > .pick button:has-text("Sell")')
+            await pg.wait_for_timeout(150)
+            r = await ev(pg, "() => ({ filters: !!document.querySelector('#storageBody .filters'), rows: document.querySelectorAll('#storageBody > .pick').length, n: window.__wg.S.storage.animals.length })")
+            check(r['filters'] or r['rows'] == r['n'], f"when the filter row hides, every stored animal is listed again ({r['rows']} rows for {r['n']} animals, filter row shown: {r['filters']})")
+            await pg.click('#storage [data-close]')
+        await section('storage filter', storage_filter)
+
+        # ---------------------------------------------------------------- zoo rank
+        async def rank():
+            await fresh(pg)
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; S.stats.rank = 0; const g0 = S.gems;
+                for (let x = 16; x <= 29; x++) for (let y = 16; y <= 19; y++) if (!S.objects.some(o => o.gx === x && o.gy === y)) S.objects.push({ id: 'f' + x + '_' + y, kind: 'deco', type: 'fountain', gx: x, gy: y, w: 1, h: 1 });
+                g.rebuild(); g.computeMeter(); const r = S.stats.rank, att = g.M.attraction, d1 = S.gems - g0;
+                for (let i = 0; i < 5; i++) g.computeMeter(); const d2 = S.gems - g0;
+                const exp = GAME.RANKS.slice(1, r + 1).reduce((a, k) => a + (k.gems || 0), 0);
+                return { r, att, d1, d2, exp, name: GAME.RANKS[r].name }; }""")
+            check(r['r'] >= 2, f"{r['att']} stars reaches rank {r['r']} ({r['name']})")
+            check(r['d2'] == r['d1'], 'rank gems are paid once')
+            check(r['d1'] == r['exp'], f"jumping several ranks pays every rank passed ({r['d1']} gems paid, {r['exp']} expected)")
+            await pg.wait_for_timeout(400)
+            shown = await ev(pg, "() => document.querySelector('#rankName').textContent")
+            check(shown == r['name'], f"HUD shows the rank name ({shown!r})")
+            await fresh(pg, tutorial=True)
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, g0 = S.gems;
+                for (let x = 16; x <= 29; x++) S.objects.push({ id: 'f' + x, kind: 'deco', type: 'fountain', gx: x, gy: 16, w: 1, h: 1 }); g.rebuild(); g.computeMeter();
+                return { rank: S.stats.rank || 0, dg: S.gems - g0, att: g.M.attraction }; }""")
+            check(r['rank'] == 0 and r['dg'] == 0, f"no rank or rank gems during the tutorial ({r['att']} stars)")
+        await section('zoo rank', rank)
+
+        # ---------------------------------------------------------------- zoomed-out drawing & summary bubbles
+        async def zoomed_out():
+            ids = await fresh(pg)
+            await ev(pg, """(id) => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.id === id); e.level = 3;
+                for (const a of e.animals) { a.due.food = S.clock - 1; a.due.water = S.clock - 1; } e.dung = [{ lx: 1, ly: 1 }, { lx: 2, ly: 1 }]; }""", ids['enc'])
+            await ev(pg, RUN, [60, 0.1])
+            for z in [1.0, 0.7, 0.6, 0.45]:
+                await ev(pg, f"() => {{ const g = window.__wg, c = g.cam; c.z = {z}; const p = {{ x: (21.5 - 22.5) * 32, y: (21.5 + 22.5) * 16 }}; c.x = p.x; c.y = p.y; }}")
+                await pg.wait_for_timeout(350)
+            await ev(pg, "() => { const c = window.__wg.cam; c.z = 0.6; c.x = (21.5 - 22.5) * 32; c.y = (21.5 + 22.5) * 16; }")
+            await pg.wait_for_timeout(300)
+            p = await ev(pg, "() => window.__wg.scr(21.5, 22.5)")
+            care0 = await ev(pg, "() => window.__wg.S.stats.care")
+            await pg.mouse.click(p['x'], p['y'] - 88 * 0.6)
+            await pg.wait_for_timeout(250)
+            r = await ev(pg, "() => ({ panel: !document.querySelector('#panel').hidden, h: (document.querySelector('#panel h2') || {}).textContent, care: window.__wg.S.stats.care })")
+            check(r['panel'] and 'Bunny' in (r['h'] or '') and r['care'] == care0, f"at zoom 0.6 the single summary bubble opens the enclosure panel ({r})")
+            await ev(pg, "() => { window.__wg.select(null); window.__wg.cam.z = 1; }")
+        await section('zoomed out', zoomed_out)
+
+        # ---------------------------------------------------------------- visitor looks & viewing spots
+        async def visitor_looks():
+            ids = await fresh(pg)
+            await ev(pg, "() => { const g = window.__wg; g.setTool({ kind: 'shop', type: 'balloon' }); g.place(26, 23); g.setTool(null); for (const o of g.S.objects) if (o.build) o.build = g.S.clock; g.tick(0.01); }")
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S; window.__seenV = new Set(); const spots = new Set();
+                const e = S.objects.find(o => o.kind === 'enc'), front = new Set([]);
+                for (let x = e.gx; x < e.gx + 3; x++) front.add(x + ',' + (e.gy + 3));
+                for (let t = 0; t < 600; t += 0.1) { g.tick(0.1); for (const v of g.visitors()) { window.__seenV.add(v); if (v.pause > 0 && front.has(v.cx + ',' + v.cy)) spots.add(v.cx + ',' + v.cy); } }
+                const vs = [...window.__seenV];
+                return { n: vs.length, kids: vs.filter(v => v.kid).length, kidBalloons: vs.filter(v => v.kid && v.balloon).length, adultBalloons: vs.filter(v => !v.kid && v.balloon).length,
+                         hats: [...new Set(vs.map(v => v.hat || null))], spots: spots.size }; }""")
+            check(r['kids'] > 0 and r['kidBalloons'] > 0 and r['adultBalloons'] == 0, f"kids (only kids) get balloons at the balloon cart ({r['kidBalloons']} of {r['kids']} kids, {r['adultBalloons']} adults)")
+            check(set(r['hats']) <= {None, 'sun', 'cap', 'beanie'} and len(r['hats']) > 1, f"visitors wear a mix of hats ({r['hats']})")
+            check(r['spots'] >= 2, f"visitors spread over several fence viewing spots ({r['spots']} of 3)")
+            await ev(pg, "() => { const c = window.__wg.cam; c.z = 0.7; }")
+            await pg.wait_for_timeout(500)
+            await ev(pg, "() => { window.__wg.cam.z = 1; }")
+        await section('visitor looks', visitor_looks)
+
+        # ---------------------------------------------------------------- long-press
+        async def long_press():
+            ids = await fresh(pg)
+            await ev(pg, """(id) => { const g = window.__wg, S = g.S, e = S.objects.find(o => o.id === id), a = e.animals[0];
+                for (const b of e.animals) { b.tx = null; b.wait = 1e9; } a.lx = 0.6; a.ly = 2.4; e.animals[1].lx = 2.4; e.animals[1].ly = 0.6; a.due.food = S.clock - 1;
+                const c = g.cam; c.z = 1.2; c.x = (21.5 - 22.5) * 32; c.y = (21.5 + 22.5) * 16; }""", ids['enc'])
+            await pg.wait_for_timeout(300)
+            p = await ev(pg, "() => { const p = window.__wg.scr(20.6, 23.4); return { x: p.x, y: p.y - 14 * 1.2 }; }")
+            c0 = await ev(pg, "() => window.__wg.S.stats.care")
+            await pg.mouse.move(p['x'], p['y'])
+            await pg.mouse.down()
+            await pg.wait_for_timeout(650)
+            mid = await ev(pg, "() => !document.querySelector('#panel').hidden")
+            await pg.mouse.up()
+            await pg.wait_for_timeout(200)
+            r = await ev(pg, "() => ({ panel: !document.querySelector('#panel').hidden, care: window.__wg.S.stats.care })")
+            check(mid and r['panel'], 'a 600 ms press on an animal opens its enclosure panel')
+            check(r['care'] == c0, f"the long-press does not also feed the animal on release (care {c0} → {r['care']})")
+            await ev(pg, "() => window.__wg.select(null)")
+            await pg.mouse.click(p['x'], p['y'])
+            await pg.wait_for_timeout(200)
+            check(await ev(pg, "() => window.__wg.S.stats.care") == c0 + 1, 'a short tap on the same animal still feeds it')
+        await section('long press', long_press)
+
+        # ---------------------------------------------------------------- festival
+        async def festival():
+            await fresh(pg)
+            MON = 1788177600000  # Mon 31 Aug 2026 12:00 UTC (summer)
+            r = await ev(pg, f"""() => {{ window.__setNow({MON}); const g = window.__wg, S = g.S; S.event = null; const E = g.ensureEvent(); S.stats.care += 900;
+                return {{ id: E.id, p: g.eventPoints() }}; }}""")
+            check(r['id'] == 'summer' and r['p'] == 900, f"festival starts ({r['id']}, {r['p']} points from 900 care actions)")
+            await ev(pg, "() => window.__wg.openHub('event')")
+            await pg.wait_for_timeout(200)
+            await pg.click('#hubBody .evstep.ready button')
+            await pg.wait_for_timeout(200)
+            check(await pg.is_visible('#reward') and await ev(pg, "() => window.__wg.S.event.claimed") == 1, 'Claim in the Festival tab pays the first milestone and shows the reward')
+            await pg.click('#rewardOk')
+            r = await ev(pg, """() => { const g = window.__wg, S = g.S, ev = GAME.EVENTS[S.event.id], log = [];
+                const items0 = S.storage.items.filter(i => i.type === ev.decor).length;
+                for (let i = 1; i < GAME.EVENT_TRACK.length; i++) { g.claimEvent(); document.querySelector('#reward').hidden = true; log.push(S.event.claimed); }
+                const items = S.storage.items.filter(i => i.type === ev.decor).length - items0;
+                const star = S.storage.animals.filter(a => a.species === ev.star && a.variant === 2).length;
+                const out = { log, items, star, lap: S.event.lap, claimed: S.event.claimed, p: g.eventPoints() }; g.claimEvent(); document.querySelector('#reward').hidden = true; out.extra = S.event.claimed; return out; }""")
+            check(r['items'] == 2, f"both decor milestones put the festival decor in storage ({r['items']})")
+            check(r['star'] == 1, f"the last milestone puts a rare star animal in storage ({r['star']})")
+            check(r['lap'] == 2 and r['claimed'] == 0 and r['p'] == 50 and r['extra'] == 1, f"after the last milestone lap 2 starts with the leftover points (lap {r['lap']}, claimed {r['claimed']}, points {r['p']}, then claimed {r['extra']})")
+            r = await ev(pg, f"""() => {{ const g = window.__wg, S = g.S; window.__setNow({MON} + 7 * 86400000); const E = g.ensureEvent(); const out = {{ lap: E.lap, claimed: E.claimed, p: g.eventPoints() }}; return out; }}""")
+            check(r['lap'] == 1 and r['claimed'] == 0 and r['p'] == 0, f"a new week resets the festival ({r})")
+            # a season change in the middle of a week must not wipe the week's progress
+            r = await ev(pg, f"""() => {{ const g = window.__wg, S = g.S; window.__setNow({MON}); S.event = null; g.ensureEvent(); S.stats.care += 100; g.claimEvent(); g.claimEvent(); document.querySelector('#reward').hidden = true;
+                const before = {{ id: S.event.id, claimed: S.event.claimed, p: g.eventPoints() }};
+                window.__setNow({MON} + 86400000); g.ensureEvent(); const after = {{ id: S.event.id, claimed: S.event.claimed, p: g.eventPoints() }};
+                window.__resetNow(); return {{ before, after }}; }}""")
+            check(r['after']['claimed'] == r['before']['claimed'] and r['after']['p'] == r['before']['p'], f"Mon 31 Aug → Tue 1 Sep keeps the week's festival progress ({r['before']} → {r['after']})")
+            await ev(pg, "() => { window.__resetNow(); window.__wg.S.event = null; }")
+            await pg.click('#hub [data-close]')
+        await section('festival', festival)
+
+        # ---------------------------------------------------------------- 390 / 1000 px layouts of the new UI
+        async def new_layouts():
+            shots = os.environ.get('QA_SHOTS')
+            for w, h in [(390, 844), (1000, 700)]:
+                ph = await ctx.new_page()
+                await ph.set_viewport_size({'width': w, 'height': h})
+                ph.on('pageerror', lambda e: errors.append(str(e)))
+                await ph.goto(PAGE)
+                await ph.wait_for_timeout(400)
+                await ev(ph, SETUP)
+                await ph.wait_for_timeout(400)
+                inside = """(sel) => { const e = document.querySelector(sel); if (!e || e.hidden) return null; const b = e.getBoundingClientRect();
+                    return b.left >= -0.5 && b.top >= -0.5 && b.right <= innerWidth + 0.5 && b.bottom <= innerHeight + 0.5 && b.width > 0; }"""
+                r = await ev(ph, """() => { const hud = [...document.querySelectorAll('.hud > *')].filter(e => e.offsetParent).map(e => e.getBoundingClientRect());
+                    const ov = []; for (let i = 0; i < hud.length; i++) for (let j = i + 1; j < hud.length; j++) { const a = hud[i], b = hud[j]; if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) ov.push([i, j]); }
+                    return { right: Math.max(...hud.map(b => b.right)), sw: document.documentElement.scrollWidth, ov: ov.length }; }""")
+                check(r['right'] <= w and r['sw'] <= w and r['ov'] == 0, f"{w}px: HUD fits without overlapping chips (rightmost {r['right']:.0f}, {r['ov']} overlaps)")
+                check(await ev(ph, inside, '#btnHelp'), f'{w}px: Ask Tilda button is on screen')
+                if shots:
+                    await ph.screenshot(path=f'{shots}/{w}-hud.png')
+                await ev(ph, "() => { const g = window.__wg, S = g.S; let need = -S.xp; for (let l = S.level; l < S.level + 3; l++) need += Math.round(50 * Math.pow(l, 1.55)); g.addXp(need); }")
+                await ph.wait_for_timeout(200)
+                check(await ev(ph, inside, '#levelUp .lvsheet'), f'{w}px: the level card fits on screen')
+                check(await ev(ph, inside, '#levelOk'), f'{w}px: the level card button is reachable')
+                if shots:
+                    await ph.screenshot(path=f'{shots}/{w}-level.png')
+                await ph.click('#levelOk')
+                await ev(ph, "() => window.__wg.showTip()")
+                await ph.wait_for_timeout(200)
+                check(await ev(ph, inside, '#tutorial'), f'{w}px: the tip box fits on screen')
+                if shots:
+                    await ph.screenshot(path=f'{shots}/{w}-tip.png')
+                await ph.click('#tutSkip')
+                await ev(ph, "() => { window.__wg.S.seenBuild = []; }")   # the pages share localStorage, so forget what an earlier page saw
+                await ph.click('#btnShop')
+                await ph.wait_for_timeout(200)
+                r = await ev(ph, "() => [...document.querySelectorAll('#shopGrid .card.new')].map(c => { const b = c.getBoundingClientRect(), s = getComputedStyle(c, '::after'); return b.right <= innerWidth + 0.5 && s.content.includes('New'); })")
+                check(len(r) > 0 and all(r), f'{w}px: New ribbons show on {len(r)} Build cards')
+                if shots:
+                    await ph.screenshot(path=f'{shots}/{w}-build.png')
+                await ph.close()
+        await section('new ui layouts', new_layouts)
 
         # ---------------------------------------------------------------- art coverage
         async def art():

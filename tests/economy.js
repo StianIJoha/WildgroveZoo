@@ -10,6 +10,7 @@ const { chromium } = require('playwright');
 
 // CARE = how often (game seconds) the player looks at the zoo: 8 = very active, 60 = casual
 const MINUTES = +(process.argv[2] || 45), SEED = +(process.argv[3] || 1), CARE = +(process.argv[4] || 8);
+const LEVEL_GEMS = 2;   // engine.js LEVEL_GEMS (gems per level-up)
 const PAGE = 'file://' + path.resolve(__dirname, '..', 'index.html');
 
 const INIT = `
@@ -25,11 +26,11 @@ function installBot() {
   const g = window.__wg, S = g.S;
   const SP = GAME.SPECIES, BI = GAME.BIOMES, SH = GAME.SHOPS, UP = GAME.UPGRADES, FOODS = GAME.FOODS;
   const $ = s => document.querySelector(s);
-  const L = { inc: { tickets: 0, shops: 0, goals: 0, tasks: 0, wishes: 0, other: 0 }, spend: { build: 0, animals: 0, food: 0, medicine: 0, upgrades: 0, land: 0, decor: 0 },
-    medUsed: 0, medBought: 0, sick: 0, sickIds: new Set(), animalSec: 0, needSec: 0, rows: [], gemsFrom: { goals: 0, tasks: 0, level: 0 }, meterSum: 0, meterN: 0, visSum: 0,
+  const L = { inc: { tickets: 0, shops: 0, goals: 0, tasks: 0, wishes: 0, festival: 0, other: 0 }, spend: { build: 0, animals: 0, food: 0, medicine: 0, upgrades: 0, land: 0, decor: 0 },
+    medUsed: 0, medBought: 0, sick: 0, sickIds: new Set(), animalSec: 0, needSec: 0, rows: [], gemsFrom: { goals: 0, tasks: 0, festival: 0, rank: 0, level: 0 }, meterSum: 0, meterN: 0, visSum: 0,
     built: [], notes: [] };
   const ticket = () => 1 + Math.floor(S.level / 3);
-  const tip = () => 4 + S.level * 2;
+  const tip = () => 2 + Math.ceil(S.level / 2);   // must match grantWish() in engine.js; the "earned" check below catches drift
   const encs = () => S.objects.filter(o => o.kind === 'enc');
   const kept = () => new Set(encs().flatMap(e => e.animals.map(a => a.species)));
   const animals = () => encs().flatMap(e => e.animals);
@@ -130,6 +131,12 @@ function installBot() {
       gain(cat, () => b.click());
       if (!$('#reward').hidden) $('#rewardOk').click();
     }
+    // weekly festival milestones (the bot claims them as soon as they're ready)
+    for (let k = 0; k < 12 && g.ensureEvent && g.ensureEvent(); k++) {
+      const E = S.event, before = E.claimed + E.lap * 100;
+      gain('festival', () => g.claimEvent()); $('#reward').hidden = true;
+      if (S.event.claimed + S.event.lap * 100 === before) break;
+    }
     closeAll();
   }
   function upgrades() {
@@ -186,11 +193,11 @@ function installBot() {
     buildAt('shop', { type: 'feeder' }, 23, 25, 1);
     for (const o of S.objects) if (o.build) o.build = S.clock;
     g.tick(0.1);
-    L.inc = { tickets: 0, shops: 0, goals: 0, tasks: 0, wishes: 0, other: 0 }; L.spend = { build: 0, animals: 0, food: 0, medicine: 0, upgrades: 0, land: 0, decor: 0 };
+    L.inc = { tickets: 0, shops: 0, goals: 0, tasks: 0, wishes: 0, festival: 0, other: 0 }; L.spend = { build: 0, animals: 0, food: 0, medicine: 0, upgrades: 0, land: 0, decor: 0 };
   }
   window.__bot = { L, step, opening, snapshot: () => ({ t: S.clock, level: S.level, coins: S.coins, gems: S.gems, paws: S.paws, earned: S.stats.earned, meter: g.M.meter, target: g.M.target, vis: g.visitors().length,
     encs: encs().length, shops: S.objects.filter(o => o.kind === 'shop').length, animals: animals().length, species: kept().size, sick: animals().filter(a => a.sick).length, medicine: S.medicine,
-    wishes: S.stats.wishes, missed: Object.values(S.wishLog).reduce((a, b) => a + b, 0), babies: S.stats.babies, care: S.stats.care, dk: g.DK }) };
+    wishes: S.stats.wishes, missed: Object.values(S.wishLog).reduce((a, b) => a + b, 0), babies: S.stats.babies, care: S.stats.care, dk: g.DK, rank: S.stats.rank || 0, rankName: GAME.RANKS[S.stats.rank || 0].name, rankGems: GAME.RANKS.slice(1, (S.stats.rank || 0) + 1).reduce((a, k) => a + (k.gems || 0), 0), festLap: S.event ? S.event.lap : 0, festClaimed: S.event ? S.event.claimed : 0 }) };
 }
 
 (async () => {
@@ -222,12 +229,14 @@ function installBot() {
   const inc = L.inc, tot = Object.values(inc).reduce((a, b) => a + b, 0);
   const mins = (s.t - t0) / 60;
   console.log(`\nIncome ${Math.round(tot)} coins = ${Math.round(tot / mins)} coins/min (engine "earned" stat: ${Math.round((s.earned - earned0) / mins)} /min)`);
+  if (Math.abs(tot - (s.earned - earned0)) > 0.02 * tot) console.log(`WARNING: the income categories (${Math.round(tot)}) and the engine's earned stat (${Math.round(s.earned - earned0)}) differ by more than 2%: a formula copied into this bot (ticket price, wish tip) is out of date.`);
   console.table(Object.fromEntries(Object.entries(inc).map(([k, v]) => [k, { coins: Math.round(v), share: (100 * v / tot).toFixed(1) + '%', perMin: Math.round(v / mins) }])));
   const sp = L.spend, stot = Object.values(sp).reduce((a, b) => a + b, 0);
   console.log(`Spending ${Math.round(stot)} coins`);
   console.table(Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, { coins: Math.round(v), share: stot ? (100 * v / stot).toFixed(1) + '%' : '-' }])));
   const animalH = L.animalSec / 3600;
-  console.log(`Level ${s.level} reached · gems ${s.gems} (from goals ${L.gemsFrom.goals}, tasks ${L.gemsFrom.tasks}, level-ups ${3 * (s.level - lvl0)}) · paws ${s.paws}`);
+  console.log(`Level ${s.level} reached · gems ${s.gems} (from goals ${L.gemsFrom.goals}, tasks ${L.gemsFrom.tasks}, festival ${L.gemsFrom.festival}, ranks ${s.rankGems} (${s.rankName}), level-ups ${LEVEL_GEMS * (s.level - lvl0)}) · paws ${s.paws}`);
+  console.log(`Festival: lap ${s.festLap}, ${s.festClaimed} milestones into it`);
   console.log(`Animals ${s.animals} in ${s.encs} enclosures (${s.species} species) · ${s.babies} babies · ${s.care} care actions`);
   console.log(`Sickness: ${L.sick} cases (${(L.sick / Math.max(1e-9, animalH)).toFixed(2)} per animal-hour) · medicine used ${L.medUsed}, bought ${L.medBought} · animals had an unmet need ${(100 * L.needSec / Math.max(1, L.animalSec)).toFixed(0)}% of the time`);
   console.log(`Visitors avg ${(L.visSum / L.meterN).toFixed(1)} · meter avg ${(L.meterSum / L.meterN).toFixed(0)}% · wishes granted ${s.wishes}, expired ${s.missed}`);
