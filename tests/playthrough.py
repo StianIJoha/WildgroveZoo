@@ -5,7 +5,7 @@ then checks a few late-game systems, and fails on any page error.
 Setup (once):  pip install playwright  &&  python -m playwright install chromium
 Run:           node build.js  &&  python tests/playthrough.py
 """
-import asyncio, pathlib, sys
+import asyncio, os, pathlib, sys
 from playwright.async_api import async_playwright
 
 PAGE = (pathlib.Path(__file__).resolve().parent.parent / 'index.html').as_uri()
@@ -33,7 +33,9 @@ check.failed = False
 async def main():
     OUT.mkdir(exist_ok=True)
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        # PW_CHROMIUM lets you point at a preinstalled browser binary
+        exe = os.environ.get('PW_CHROMIUM')
+        browser = await p.chromium.launch(**({'executable_path': exe} if exe else {}))
         pg = await browser.new_page(viewport={'width': 1280, 'height': 800})
         errors = []
         pg.on('pageerror', lambda e: errors.append(str(e)))
