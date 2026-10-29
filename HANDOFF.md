@@ -45,7 +45,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 **Rendering.**
 - **Cached ground layer:** the ground, paths and the forest behind the zoo are pre-drawn into an offscreen canvas. It is redrawn only when `groundDirty` or `forestDirty` is set, or the zoom scale bucket changes.
 - **Front forest:** the trees in front of the zoo are a second cached layer drawn on top.
-- **Live layer:** objects, animals, visitors and litter are depth-sorted by `gx + gy` every frame.
+- **Live layer:** objects, animals, visitors and litter are depth-sorted by `gx + gy` every frame. Below 0.65 zoom each enclosure shows one summary bubble.
 - **Night layer:** when `DK` (darkness, 0–1) is above zero, `drawNight()` tints the view and adds glows for decor with `light: true`, the gate, shops and fireflies. Bubbles and floaters are drawn after it so they stay bright.
 - **Icons:** world-space icons go through `drawIcon()`, which draws bitmaps cached per size and zoom bucket. Inline icons in HTML strings use `ic()`, which caches each icon as a data URL (a serialised canvas would be blank).
 - **Static sprites:** static decor and shop sprites are cached per scale bucket (`cachedSprite`). Animated ones (`fountain`, `lamp`, `balloon`) and all animals and people are drawn live.
@@ -120,7 +120,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 
 - **Saves are tied to the browser and origin.** Use the save code or file in the Zoo office to move a zoo between the artifact, local files and devices.
 - **Money is fairly loose.** In a 30-minute QA run, goal rewards were ~42% of early income and passive income was ~80 coins/min with 2 enclosures. Food was cheap until its price was raised; medicine is the main drain, and players can miss that sickness blocks breeding.
-- **Performance:** animals and visitors are still drawn live every frame. Icons are cached, but a maxed-out zoo (~100 animals, 80 visitors) costs ~30 ms a frame in headless software rendering; the auto-quality drop keeps it playable. Caching animal animation frames is the next step.
+- **Performance:** below 0.8 zoom, animals and visitors are drawn from cached frames (`drawFrame`, 8 per walk cycle plus one idle pose); close up they're drawn live. A maxed-out zoo (~100 animals, 80 visitors) went from ~31 to ~14 ms a frame at 0.5 zoom in headless software rendering. Close-up views of a crowded area are still the most expensive case.
 - **Old artifact saves** made before the habitat lock may still contain mixed-species enclosures, which load fine.
 - **`engine.js` is one large IIFE** with no modules or types, and the test coverage is a single smoke test.
 - **Fonts** (Grandstander and Nunito) load from Google Fonts and fall back to system fonts when offline.
@@ -133,7 +133,7 @@ Done since the first handoff: save export/import, visitor wishes and attraction-
 2. **Event-exclusive animals:** the festival gives a rare variant of an existing species; truly exclusive species or variants per season would be stronger.
 3. **Second area**, like the original's teased "Ocean World": an aquarium map with dolphins and rays (Coast is a first step).
 4. **Cloud saves and friends with Supabase:** visit friends' zoos, leave a gift or help with care, and a leaderboard. This needs a small backend.
-5. **Tech:** move `src/` to ES modules and a Vite build (keeping single-file output), add TypeScript types for `S`, unit-test the economy functions, and cache animal animation frames for performance.
+5. **Tech:** move `src/` to ES modules and a Vite build (keeping single-file output), add TypeScript types for `S`, unit-test the economy functions, and and measure performance on real phones.
 6. **QoL:** a filter in storage, tooltips on everything, colour-blind-safe need icons, and a larger hit area for small animals.
 
 After any change: run `node build.js` and `python tests/playthrough.py`, and look at the game at 1280×800 and at phone width (390 px).
