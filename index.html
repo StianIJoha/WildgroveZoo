@@ -223,6 +223,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
 .savesheet .row:last-child { justify-content: flex-end; }
 .savesheet textarea { width: 100%; font: 600 11px/1.35 ui-monospace, Menlo, Consolas, monospace; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; padding: 8px 10px; resize: vertical; color: var(--ink); user-select: text; }
 .filebtn { cursor: pointer; }
+.namefield { font: 800 14px var(--f-ui); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; background: #fff; color: var(--ink); width: min(220px, 100%); user-select: text; }
 .savemsg { font-size: 12.5px; font-weight: 800; color: var(--leaf-deep); margin: 8px 0 0; min-height: 1em; }
 .restock { background: #fff8e3; box-shadow: inset 0 0 0 1.5px #f0d590; }
 .evhead { display: flex; gap: 12px; align-items: center; background: linear-gradient(120deg, color-mix(in srgb, var(--ev) 18%, #fff), #fff); border-radius: 16px; padding: 10px 12px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ev) 40%, transparent); }
@@ -276,7 +277,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
   <canvas id="world" aria-label="Your zoo. Drag to move around, scroll or pinch to zoom, tap animals and enclosures to care for them."></canvas>
 
   <div class="hud">
-    <div class="brand">Wildgrove<small id="rankName">Backyard zoo</small></div>
+    <div class="brand"><span id="zooName">Wildgrove</span><small id="rankName">Backyard zoo</small></div>
     <div class="chip" title="Coins: from tickets, shops, wishes and rewards"><span id="icoCoin"></span><span id="coins">0</span></div>
     <div class="chip" title="Gems: rush timers, hire staff, adopt rare animals"><span id="icoGem"></span><span id="gems">0</span></div>
     <div class="chip" title="Paws: from caring for animals; spend them on upgrades, toys and the lab"><span id="icoPaw"></span><span id="paws">0</span></div>
@@ -1556,6 +1557,7 @@ const ART = (function () {
   function faceRect(ctx, A, B, s0, s1, z0, z1) { quad(ctx, [fp(A, B, s0, z0), fp(A, B, s1, z0), fp(A, B, s1, z1), fp(A, B, s0, z1)]); }
 
   const decor = {};
+  let gateLabel = 'WILDGROVE';                         // zoo name on the entrance gate sign (ART.gateLabel)
   function wrapDecor(fn) { return function (ctx, t) { ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; fn(ctx, t || 0); ctx.restore(); }; }
 
   decor.oak = wrapDecor((ctx, t) => {
@@ -1816,17 +1818,23 @@ const ART = (function () {
     // hanging chains
     ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-17, -61); ctx.lineTo(-17, -56); ctx.moveTo(17, -61); ctx.lineTo(17, -56); ctx.stroke();
-    // sign board
+    // sign board: text from ART.gateLabel; long names shrink the font, then widen the board (max ±46, inside BOX1)
     const sw = Math.sin(t * 1.5) * 0.015;
+    const label = String(gateLabel).toUpperCase();
+    const FONT = (f) => '900 ' + f + 'px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif';
+    ctx.font = FONT(8.5);
+    let fs = 8.5, W = 27; const mw = ctx.measureText(label).width;
+    if (mw > 44) {
+      fs = 8.5 * 44 / mw;
+      if (fs < 5.6) { W = Math.min(46, mw * 5.6 / 8.5 / 2 + 5); fs = 8.5 * (W * 2 - 10) / mw; }
+    }
     ctx.save(); ctx.translate(0, -62); ctx.rotate(sw);
-    rrect(ctx, -27, -4, 54, 14, 5); paint(ctx, '#3f8f5a', '#24583a', 1.6);
-    rrect(ctx, -25, -2.2, 50, 10.4, 4); ctx.strokeStyle = '#f3e5c0'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.font = '900 8.5px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif';
+    rrect(ctx, -W, -4, W * 2, 14, 5); paint(ctx, '#3f8f5a', '#24583a', 1.6);
+    rrect(ctx, -W + 2, -2.2, W * 2 - 4, 10.4, 4); ctx.strokeStyle = '#f3e5c0'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.font = fs === 8.5 ? FONT(8.5) : FONT(fs.toFixed(2));
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    let fs = 8.5; const mw = ctx.measureText('WILDGROVE').width;
-    if (mw > 44) { fs = 8.5 * 44 / mw; ctx.font = '900 ' + fs.toFixed(2) + 'px "Arial Rounded MT Bold","Trebuchet MS","Verdana",sans-serif'; }
-    ctx.lineWidth = 2.2; ctx.strokeStyle = '#24583a'; ctx.strokeText('WILDGROVE', 0, 3.4);
-    ctx.fillStyle = '#fff4d6'; ctx.fillText('WILDGROVE', 0, 3.2);
+    ctx.lineWidth = fs < 6 ? 1.6 : 2.2; ctx.strokeStyle = '#24583a'; ctx.strokeText(label, 0, 3.4);
+    ctx.fillStyle = '#fff4d6'; ctx.fillText(label, 0, 3.2);
     ctx.restore();
     // leafy crest
     cloud(ctx, [[0, -75, 4.2], [-5, -73, 3.2], [5, -73, 3.2]], '#5bb85a', '#2f6e33');
@@ -4043,7 +4051,11 @@ const ART = (function () {
     camel: ['Dromedary camel', 'Dark dromedary', 'Pale dromedary', 'Black camel', 'Festival camel']
   };
 
-  return { animals: animals, decor: decor, person: person, icons: icons, guide: guide, wheel: wheel, variantNames: variantNames };
+  return {
+    animals: animals, decor: decor, person: person, icons: icons, guide: guide, wheel: wheel, variantNames: variantNames,
+    get gateLabel() { return gateLabel; },
+    set gateLabel(v) { v = v == null ? '' : String(v).trim(); gateLabel = v || 'WILDGROVE'; }
+  };
 })();
 
 </script>
@@ -4600,6 +4612,7 @@ const activeNeeds = a => NEEDS.filter(n => needActive(a, n));
 function mood(e, a) {
   let m = 1 - 0.2 * activeNeeds(a).length - (a.sick ? 0.4 : 0) - 0.15 * (e.dung.length / 6) + G.TOY_MOOD * (e.toys ? e.toys.length : 0);
   if (SPECIES[a.species].biome === e.biome) m += 0.1;
+  if (WX === 'snow' && e.biome === 'ice') m += 0.1;
   return Math.max(0, Math.min(1, m));
 }
 function encMood(e) { if (!e.animals.length) return 1; let s = 0; for (const a of e.animals) s += mood(e, a); return s / e.animals.length; }
@@ -4691,6 +4704,46 @@ function darkness() {
   const p = dayPhase(), ease = k => k * k * (3 - 2 * k);
   if (p < 0.6) return 0; if (p < 0.68) return ease((p - 0.6) / 0.08); if (p < 0.92) return 1; return ease(1 - (p - 0.92) / 0.08);
 }
+// ---------- weather ----------
+// now and then a shower (snow in winter months) rolls in for a few minutes. Rain keeps visitors away
+// but fills every water trough; ice-floe animals love the snow.
+let WX = null, wxT = 0;
+const weatherOn = () => S.settings.weather !== false && S.tut < 0;
+function tickWeather(dt) {
+  if (!weatherOn()) { WX = null; return; }
+  const w = S.weather;
+  if (w && S.clock < w.until) { WX = w.kind; if (WX === 'rain') { wxT += dt; if (wxT > 3) { wxT = 0; for (const e of S.objects) if (e.kind === 'enc' && !e.build) for (const a of e.animals) if (needActive(a, 'water')) fulfill(e, a, 'water', true); } } return; }
+  if (w && w.kind) { S.weather = { kind: null, until: S.clock + 240 + rnd() * 420 }; WX = null; return; } // a dry spell after every shower
+  if (w && S.clock < w.until) return;
+  WX = null;
+  if (rnd() < dt / 90) { // roughly one roll a minute and a half once the dry spell is over
+    const m = new Date().getMonth(), kind = (m === 11 || m <= 1) && rnd() < 0.6 ? 'snow' : 'rain';
+    S.weather = { kind, until: S.clock + 100 + rnd() * 140 }; WX = kind;
+    toast(kind === 'rain' ? 'A rain shower! Fewer visitors for a while, but the rain fills every water trough.' : 'It\'s snowing! The ice-floe animals are thrilled.');
+  }
+}
+let drops = [];
+const reducedMotion = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+function drawWeather() {
+  if (!WX) { drops.length = 0; return; }
+  if (drops.kind !== WX) { drops = []; drops.kind = WX; }
+  if (reducedMotion) { if (WX === 'rain') { ctx.fillStyle = 'rgba(40,60,90,0.12)'; ctx.fillRect(0, 0, W, H); } return; }
+  const snow = WX === 'snow', want = Math.min(260, Math.round(W * H / (snow ? 5200 : 3200)));
+  while (drops.length < want) drops.push({ x: rnd() * W, y: rnd() * H, v: snow ? 30 + rnd() * 40 : 520 + rnd() * 260, r: snow ? 1.2 + rnd() * 2 : 0, ph: rnd() * 6 });
+  ctx.save();
+  if (!snow) { ctx.fillStyle = 'rgba(40,60,90,0.12)'; ctx.fillRect(0, 0, W, H); }
+  ctx.strokeStyle = 'rgba(210,225,255,0.55)'; ctx.lineWidth = 1.2; ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  const dt = 1 / 60;
+  ctx.beginPath();
+  for (const d of drops) {
+    d.y += d.v * dt; d.x += snow ? Math.sin(T + d.ph) * 0.4 : -d.v * 0.18 * dt;
+    if (d.y > H + 10) { d.y = -10; d.x = rnd() * W * 1.1; }
+    if (snow) { ctx.moveTo(d.x + d.r, d.y); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); } else { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 2.6, d.y - 13); }
+  }
+  if (snow) ctx.fill(); else ctx.stroke();
+  ctx.restore();
+}
+
 function timeToChange() { const p = dayPhase(); const nextAt = p < 0.6 ? 0.6 : p < 0.92 ? 0.92 : 1.6; return (nextAt - p) * G.DAY_LENGTH; }
 
 // ---------- zoo meter / attraction ----------
@@ -5035,7 +5088,7 @@ function frame(now) {
   } catch (e) { if (!frameErr) { frameErr = true; console.error(e); } }
 }
 function tick(dt) {
-  S.clock += dt; DK = darkness();
+  S.clock += dt; DK = darkness(); tickWeather(dt);
   meterT -= dt; if (meterT <= 0) { meterT = 0.5; computeMeter(); }
   for (const o of S.objects) {
     tickBuild(o);
@@ -5046,7 +5099,7 @@ function tick(dt) {
   tickHelpers(dt);
   for (const p of S.escaped) stepEscaped(p, dt);
   spawnT -= dt;
-  const vt = Math.round(M.target * (1 - 0.45 * DK));
+  const vt = Math.round(M.target * (1 - 0.45 * DK) * (WX === 'rain' ? 0.7 : 1));
   if (visitors.length < vt && spawnT <= 0) { spawnVisitor(); const base = Math.min(1.7, 60 / Math.max(1, vt)); spawnT = base * (0.7 + rnd() * 0.6) * (visitors.length < vt * 0.7 ? 0.5 : 1); }
   for (const v of visitors) stepVisitor(v, dt);
   visitors = visitors.filter(v => !v.gone && v.age < v.life + 60);
@@ -5247,6 +5300,8 @@ function render() {
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(46,58,42,0.8)'; ctx.strokeText(f.text, f.wx, f.wy - f.t * 28); ctx.fillStyle = f.color; ctx.fillText(f.text, f.wx, f.wy - f.t * 28); ctx.restore();
   }
   ctx.restore();
+  drawWeather();
+  drawConfetti();
 }
 function drawNight(dk, on) {
   const a = toWorld(0, 0), b = toWorld(W, H);
@@ -5269,7 +5324,6 @@ function drawNight(dk, on) {
     if (k > 0.25) { ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
   }
   ctx.restore();
-  drawConfetti();
 }
 let confetti = [];
 function burst() {
@@ -5594,6 +5648,11 @@ function updateHUD() {
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
   $('#rankName').textContent = G.RANKS[S.stats.rank || 0].name;
+  const zn = S.settings.zooName || 'Wildgrove';
+  if ($('#zooName').textContent !== zn) {
+    $('#zooName').textContent = zn; document.title = zn === 'Wildgrove' ? 'Wildgrove Zoo' : `${zn} · Wildgrove Zoo`;
+    ART.gateLabel = S.settings.zooName || null; for (const k of [...spriteCache.keys()]) if (k.startsWith('gate|')) spriteCache.delete(k);
+  }
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
   if (S.tut < 0) ensureTasks();
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
@@ -5607,7 +5666,7 @@ function updateHUD() {
   const night = DK > 0.5, dc = $('#btnDay'); if (dc.dataset.n !== String(night) || !dc.firstChild) { dc.dataset.n = night; dc.innerHTML = ''; dc.appendChild(iconCanvas(night ? 'moon' : 'sun', 20, 'icon')); }
   dc.hidden = !S.settings.night || S.tut >= 0;
   $('#btnHelp').hidden = S.tut >= 0;
-  dc.title = `${night ? 'Night' : 'Day'} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night, and animals sleep.`;
+  dc.title = `${night ? 'Night' : 'Day'}${WX ? (WX === 'rain' ? ', raining' : ', snowing') : ''} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night or in the rain, and animals sleep at night.`;
   if (!$('#quests').hidden) renderQuests();
 }
 
@@ -6167,18 +6226,36 @@ function renderHub() {
     const wl = Object.entries(S.wishLog).sort((a, b) => b[1] - a[1]).slice(0, 4);
     if (wl.length) { ex.appendChild(el('h3', '', 'Visitor wishes')); ex.appendChild(el('p', 'hint', `Granted ${S.stats.wishes}. Most missed: ${wl.map(([k, n]) => { const [kind, key] = k.split(':'); return `${wishName({ kind, key })} (${n}×)`; }).join(', ')}.`)); }
     ex.appendChild(el('h3', '', 'Settings'));
-    const st = S.settings, rr = el('div', 'row wrap');
+    const st = S.settings, nameRow = el('div', 'row wrap');
+    const nf = el('input', 'namefield'); nf.maxLength = 22; nf.placeholder = 'Wildgrove'; nf.value = st.zooName || ''; nf.setAttribute('aria-label', 'Zoo name');
+    nf.onchange = () => { st.zooName = nf.value.trim().slice(0, 22); updateHUD(); dirty(); toast(`Welcome to ${st.zooName || 'Wildgrove'}!`); };
+    nameRow.appendChild(el('b', '', 'Zoo name')); nameRow.appendChild(nf); ex.appendChild(nameRow);
+    const rr = el('div', 'row wrap');
     rr.appendChild(hbtn('mini' + (st.muted ? ' ghost' : ' on'), `Sound ${st.muted ? 'off' : 'on'}`, () => { st.muted = !st.muted; applySettings(); if (!muted) audioUnlock(); }));
     rr.appendChild(hbtn('mini' + (st.music === false ? ' ghost' : ' on'), `Music ${st.music === false ? 'off' : 'on'}`, () => { st.music = st.music === false; applySettings(); }));
+    rr.appendChild(hbtn('mini' + (st.weather !== false ? ' on' : ' ghost'), `Weather ${st.weather !== false ? 'on' : 'off'}`, () => { st.weather = st.weather === false; }));
     rr.appendChild(hbtn('mini' + (st.night ? ' on' : ' ghost'), `Day & night ${st.night ? 'on' : 'off'}`, () => { st.night = !st.night; }));
     ex.appendChild(rr);
     const sr = el('div', 'row wrap');
     sr.appendChild(hbtn('mini', `${ic('save', 14)} Save code & backup`, () => openSaveModal()));
+    sr.appendChild(hbtn('mini', 'Take a photo', () => takePhoto()));
     sr.appendChild(hbtn('mini ghost', 'Start a new zoo', () => { $('#resetConfirm').hidden = false; }));
     ex.appendChild(sr);
     ex.appendChild(el('p', 'hint', 'Keys: H tips · B build · P paths · C clear · S storage · G goals · Z zoo · +/− zoom · M sound · Ctrl+Z undo decor · Esc close'));
     box.appendChild(ex);
   }
+}
+// saves the current view (without the HUD) as a PNG, with the zoo's name in the corner
+function takePhoto() {
+  closeSheets(); select(null); setTool(null); render();
+  const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; const x = c.getContext('2d');
+  x.drawImage(cv, 0, 0); x.scale(DPR, DPR);
+  const name = S.settings.zooName || 'Wildgrove', label = `${name} · ${G.RANKS[S.stats.rank || 0].name}`;
+  x.font = '800 18px Grandstander, Nunito, system-ui, sans-serif'; const w = x.measureText(label).width + 28;
+  x.fillStyle = 'rgba(255,251,242,0.92)'; x.beginPath(); x.roundRect ? x.roundRect(14, H - 50, w, 36, 18) : x.rect(14, H - 50, w, 36); x.fill();
+  x.fillStyle = '#2d6b3a'; x.textBaseline = 'middle'; x.fillText(label, 28, H - 31);
+  c.toBlob(b => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${name.replace(/[^\w-]+/g, '-').toLowerCase()}-zoo.png`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }, 'image/png');
+  sfx('coin'); toast('Photo saved');
 }
 function openSaveModal() {
   const m = $('#saveModal'); m.hidden = false; $('#saveOut').value = exportCode(); $('#saveIn').value = ''; $('#saveMsg').textContent = '';
@@ -6348,6 +6425,20 @@ function voice(sp, baby) {
     o.connect(g).connect(master); o.start(t0); o.stop(t0 + len + 0.02);
   }
 }
+let rainNode = null;
+function rainSound() {
+  const want = AC && !muted && musicOn && WX === 'rain' && !document.hidden;
+  if (want && !rainNode) {
+    const len = AC.sampleRate * 2, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400; const g = AC.createGain(); g.gain.value = 0.0001;
+    src.connect(f).connect(g).connect(master); src.start(); g.gain.exponentialRampToValueAtTime(0.025, AC.currentTime + 2); rainNode = { src, g };
+  } else if (!want && rainNode) { const r = rainNode; rainNode = null; r.g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + 1.5); r.src.stop(AC.currentTime + 1.6); }
+}
+function ambience(night, t0) {
+  const chirp = (f0, f1, t, len, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g).connect(master); o.start(t); o.stop(t + len + 0.02); };
+  if (night) { const f = 4200 + rnd() * 600; for (let i = 0; i < 6; i++) chirp(f, f * 1.02, t0 + i * 0.055, 0.035, 0.006); }
+  else { const f = 2200 + rnd() * 1400, n = 2 + Math.floor(rnd() * 3); for (let i = 0; i < n; i++) chirp(f, f * (1.2 + rnd() * 0.4), t0 + i * 0.12, 0.08, 0.008); }
+}
 // gentle marimba-style loop: I–vi–IV–V in C, pentatonic melody
 function startMusic() {
   if (musicT || !AC) return;
@@ -6363,6 +6454,9 @@ function startMusic() {
       if (b === 0) ch.forEach(f => tone(f / 2, next, night ? 2.4 : 1.6, 0.025 * v, 'sine'));
       if (b % 2 === 0) tone(ch[(b / 2) % 3], next, 0.35, 0.03 * v, night ? 'sine' : 'triangle');
       if (rnd() < (night ? 0.3 : 0.55)) tone(pent[Math.floor(rnd() * pent.length)] / (night ? 2 : 1), next, night ? 0.6 : 0.3, 0.022 * v, night ? 'sine' : 'triangle');
+      rainSound();
+      // ambience: a bird now and then by day, cricket trills at night
+      if (rnd() < (night ? 0.06 : 0.03)) ambience(night, next + rnd() * 0.2);
       next += night ? 0.4 : 0.28; beat++;
     }
   }, 120);
@@ -6432,7 +6526,7 @@ const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
 window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
-  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, addXp, advice, showTip, ensureEvent, eventPoints, claimEvent };
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; }, get WX() { return WX; }, addXp, advice, showTip, ensureEvent, eventPoints, claimEvent };
 })();
 
 </script>
