@@ -5068,7 +5068,8 @@ try { window.claude && window.claude.hot && window.claude.hot.snapshot && window
 const start = d => boot(d && d.S ? d : null);
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
 
-window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec };
+window.__wg = { scr: (gx, gy) => { const p = iso(gx, gy); return { x: (p.x - cam.x) * cam.z + W / 2, y: (p.y - cam.y) * cam.z + H / 2 }; }, get S() { return S; }, get M() { return M; }, get tool() { return tool; }, rebuild, tick, render, setTool, select, place, careAll, collectShop, visitors: () => visitors, cam, openHub, computeMeter, skipTutorial, adopt, placeRec, storeRec,
+  undoPlace, exportCode, parseSave, loadState, ensureTasks, taskProg, darkness, lowFoods, restockPlan, makeWish, route, offlineProgress, save, sfx, tap, get DK() { return DK; } };
 })();
 
 </script>
