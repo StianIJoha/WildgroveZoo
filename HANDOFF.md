@@ -32,7 +32,7 @@ It is plain HTML, CSS and JavaScript with no framework and no dependencies. All 
 
 ## Architecture
 
-**State.** Everything that is saved lives in one object `S`: coins, gems, paws, xp, level, `clock`, `owned` (land index), `objects[]`, `paths[]` (`"x,y"` strings), `litter[]`, `storage`, `food`, `medicine`, `helpers`, `cards`, `claimed`, `stats` (including `careBy[species]` and `rank`), `tut` (tutorial step, -1 when done), `wheelNext`, `tasks` (daily tasks), `event` (weekly festival), `wishLog` (missed visitor wishes) and `settings` (`muted`, `music`, `night`). `migrate(s)` fills in anything an older save is missing; call it on every loaded or imported save. It is saved to `localStorage['wildgrove.save.v2']` every 8 s, shortly after any action, and on `pagehide`. Keys starting with `_` (caches like `_conn`, `_props`) are stripped when saving. `exportCode()` / `parseSave()` turn a save into a base64 code and back; the Zoo office has a modal to copy, download, paste or open one, and `loadState()` swaps it in.
+**State.** Everything that is saved lives in one object `S`: coins, gems, paws, xp, level, `clock`, `owned` (land index), `objects[]`, `paths[]` (`"x,y"` strings), `litter[]`, `storage`, `food`, `medicine`, `helpers`, `cards`, `claimed`, `stats` (including `careBy[species]` and `rank`), `tut` (tutorial step, -1 when done), `wheelNext`, `tasks` (daily tasks), `event` (weekly festival), `wishLog` (missed visitor wishes) `weather` (`{ kind, until }`), `seenBuild` (Build-menu items already looked at) and `settings` (`muted`, `music`, `night`, `weather`, `zooName`). `migrate(s)` fills in anything an older save is missing; call it on every loaded or imported save. It is saved to `localStorage['wildgrove.save.v2']` every 8 s, shortly after any action, and on `pagehide`. Keys starting with `_` (caches like `_conn`, `_props`) are stripped when saving. `exportCode()` / `parseSave()` turn a save into a base64 code and back; the Zoo office has a modal to copy, download, paste or open one, and `loadState()` swaps it in.
 
 **Objects** in `S.objects` have a `kind`:
 - `enc`: a 3×3 enclosure with `biome`, `level` (0–4), `species`, `variant`, `animals[]`, `dung[]`, `toys[]` and `breed` progress.
@@ -68,6 +68,8 @@ Any object can have `build`, the game time at which construction finishes, and `
 | `ART.animals[id](ctx, t, { baby, flip, moving, sex, variant })` | Feet at (0,0), faces right. Babies draw at 0.6 scale. `variant` 0–4 are colour morphs; 3–4 sparkle |
 | `ART.decor[id](ctx, t)` | Base centre at (0,0) on a 64×32 tile diamond. 2×2 buildings centre on a 128×64 diamond and `construction3` on 192×96. `ART.decor.litter(ctx, t, k)` with k 0–2 |
 | `ART.icons[id](ctx, size)` | Centred |
+| `ART.gateLabel` | Text on the gate sign (default WILDGROVE); clear the `gate|*` sprite cache after changing it |
+| `ART.person` opts | also `kid`, `dress`, `hat` (`cap`/`sun`/`beanie`), `hatColor`, `balloon` |
 | `ART.decor.toyBall` / `toyLog` / `toyTire` / `toyPost` | Enclosure toys, about 15–24 px wide, base at (0,0) |
 | `ART.person(ctx, t, { shirt, skin, hair, moving, flip })` | Visitors |
 | `ART.guide(ctx, size, t, mood)` | Tilda the head keeper; mood is `happy`, `surprised` or `wink` |
@@ -100,6 +102,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 - **Zoo meter (0–100%)** is weighted: animal mood 40%, tidiness 25%, variety 15%, decor 10%, babies 10%. Variety is judged against `min(8, 2 + level × 0.6)` kinds. Visitor target = min(80, attraction stars ÷ 3 × (0.4 + 0.6 × meter)), lowered by up to 45% at night. Visitors spawn at the gate, pay a ticket (1 + level ÷ 3 coins), pick attractions (weighted by appeal and distance), route there over the path graph with `route()` (BFS), look for a while, and head back to the gate when their time is up.
 - **Visitor wishes:** 18% of visitors wish for an unlocked animal, a shop or somewhere to sit (thought bubble; tap it to read). They head for a match; reaching one pays a tip (2 + level ÷ 2 coins). Unmet wishes expire after 45 s and are counted in `wishLog`, shown in the Zoo office as "most missed".
 - **Day/night:** a day is `DAY_LENGTH` (900) game seconds; night falls at 60% and lifts at 92%. Animals sleep, visitors thin out and lights glow. Off during the tutorial, and can be switched off in settings.
+- **Weather:** after a dry spell of 4–11 min, a shower can roll in for 100–240 s: rain (fills every water trough every 3 s, visitors ×0.7, soft rain sound) or, mostly in December–February, snow (+0.1 mood in ice-floe enclosures). Drawn as screen-space particles (`drawWeather`), tint only with reduced motion. Off in the tutorial; switchable in settings.
 - **Zoo rank:** `RANKS` by attraction stars (Backyard zoo → World-famous zoo), shown under the logo; each new rank pays gems once.
 - **Shops** (8 types): each fills over its pay period, faster with more visitors and a higher meter, and only when connected to a path. When full, a silver coin appears to collect. Shops are the main income.
 - **Build timers** on enclosures, shops and buildings, which can be rushed with gems.
@@ -110,7 +113,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 - **Wheel of fortune:** a free spin every 4 real hours, otherwise 2 gems. 8 weighted prizes.
 - **Collections:** 6 habitats × 5 fact cards. Cards drop from care, litter, the wheel and safaris; completing a set pays a reward plus a decor item.
 - **Staff** (Zoo office): feeding keeper, water carrier, cuddle keeper, groundskeeper and vet (treats sick animals from your medicine stock), hired for 2 h with gems.
-- **Land expansion:** 6 extra plots, unlocked by level and bought with coins, or earlier with gems. New land arrives covered in wild trees to clear.
+- **Land expansion:** 6 extra plots, unlocked by level and bought with coins and paws (15–100), or earlier with gems. New land arrives covered in wild trees to clear.
 - **Storage:** animals, stored buildings and decor (enclosures keep their level), food and medicine. Everything can be moved, stored, sold or removed.
 - **Goals:** 25 sequential goals with 4 shown at a time.
 - **Daily tasks:** three random tasks from `DAILY` (care, care for one species, shops, litter, dung, wishes, babies, visitors, coins), scaled by level, refreshed every 4 real hours. Progress is a stat delta from when the task was made. Finishing all three pays a bonus. Shown above the goals in the Goals sheet.
@@ -133,7 +136,7 @@ Any object can have `build`, the game time at which construction finishes, and `
 
 **Balance (from `tests/economy.js`, 45 min, seed 1):** an attentive player earns ~380 coins/min, a casual one (checks every 5 min) ~215. Shops are the biggest income (34–39%), then goals (20–34%), tickets (15–22%), wishes (11–16%) and tasks (3–6%). Sickness only shows up with neglect (~1 case per animal-hour when checking every 5 min). Level-ups give 2 gems. Paws still accumulate faster than they are spent; land expansion (6,000 coins at level 10) is the next sink to check.
 
-**Also new:** a level-up card listing unlocks, confetti, "New" ribbons in the Build menu, Ask Tilda tips (? or H), animal personalities, upgrade-level signs, a storage habitat filter, kids/hats/balloons on visitors, and night-time music.
+**Also new:** a zoo name (header, page title and gate sign), Take a photo (PNG of the view), weather, ambient birdsong/crickets, a level-up card listing unlocks, confetti, "New" ribbons in the Build menu, Ask Tilda tips (? or H), animal personalities, upgrade-level signs, a storage habitat filter, kids/hats/balloons on visitors, and night-time music.
 
 Done since the first handoff: save export/import, visitor wishes and attraction-seeking visitors, daily tasks, a weekly seasonal festival with laps, vet staff and 5 starting medicine, species calls and toys, day/night, the Coast habitat (seals, otters, sea turtles), two more Dunes animals, undo/cancel-build/restock, keyboard shortcuts, long-press and haptics.
 
