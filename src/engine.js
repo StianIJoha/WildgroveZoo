@@ -486,7 +486,9 @@ function chooseDest(v) {
   const wt = o => (o.kind === 'enc' ? 3 + o.animals.length : o.kind === 'shop' ? 2 : 1) / (4 + Math.abs(o.gx - v.cx) + Math.abs(o.gy - v.cy));
   let r = rnd() * cands.reduce((a, o) => a + wt(o), 0), o = cands[0];
   for (const c of cands) { r -= wt(c); if (r <= 0) { o = c; break; } }
-  return { obj: o, cells: frontCells(o) };
+  // aim for one random viewing spot along the fence, so crowds spread out instead of piling on the nearest tile
+  const cells = frontCells(o);
+  return { obj: o, cells: cells.length > 1 ? [pick(cells)] : cells };
 }
 function stepVisitor(v, dt) {
   v.age += dt;
