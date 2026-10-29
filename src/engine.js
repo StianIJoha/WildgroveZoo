@@ -50,6 +50,10 @@ function migrate(s) {
   for (const b of Object.keys(COLLECTIONS)) if (!s.cards[b]) s.cards[b] = [0, 0, 0, 0, 0];
   if (!s.tasks) s.tasks = { next: 0, list: [] };
   if (!s.wishLog) s.wishLog = {};
+  if (!s.seenBuild) { // older saves: everything already unlocked counts as seen
+    s.seenBuild = [];
+    for (const [kind, tbl] of [['enc', BIOMES], ['shop', SHOPS], ['bld', BUILDINGS], ['deco', DECOR]]) for (const [k, d] of Object.entries(tbl)) if (d.lvl <= s.level) s.seenBuild.push(kind + ':' + k);
+  }
   s.settings = Object.assign({ muted: false, music: true, night: true }, s.settings);
   for (const o of s.objects) if (o.kind === 'enc' && !o.toys) o.toys = [];
   return s;
@@ -1208,6 +1212,7 @@ function updateHUD() {
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
   const hubN = S.tut >= 0 ? 0 : (Date.now() >= S.wheelNext ? 1 : 0) + Object.keys(COLLECTIONS).filter(b => collComplete(b) && !S.collectionsDone.includes(b)).length + (eventReady() ? 1 : 0);
   $('#hubBadge').hidden = !hubN; $('#hubBadge').textContent = hubN;
+  const bn = S.tut < 0 ? unseenBuild() : 0; $('#buildBadge').hidden = !bn; $('#buildBadge').textContent = bn;
   const storeN = S.storage.animals.length + S.storage.items.length; $('#storeBadge').hidden = !storeN; $('#storeBadge').textContent = storeN;
   const low = S.tut < 0 ? lowFoods() : [], lf = $('#lowFood');
   lf.hidden = !low.length;
@@ -1504,10 +1509,12 @@ function renderShop() {
     : shopTab === 'shop' ? Object.entries(SHOPS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: `${fmt(d.pay)} coins · about ${fmtTime(d.period / ((0.5 + M.meter / 100) * (0.25 + 0.75 * Math.min(1, visitors.length / 12))))} now`, t: { kind: 'shop', type: id } }))
     : shopTab === 'bld' ? Object.entries(BUILDINGS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.desc, t: { kind: 'bld', type: id }, unique: true }))
     : Object.entries(DECOR).filter(([, d]) => !d.event).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.bin ? 'Less litter nearby' : `+${d.appeal} stars`, t: { kind: 'deco', type: id } }));
+  const seen = [];
   for (const e of entries) {
     const have = e.unique && S.objects.some(o => o.type === e.id);
-    const locked = S.level < e.lvl;
-    const card = el('button', 'card' + (locked || have ? ' locked' : '') + (S.coins < e.cost ? ' poor' : ''));
+    const locked = S.level < e.lvl, key = e.t.kind + ':' + e.id, isNew = !locked && e.lvl > 1 && !S.seenBuild.includes(key);
+    if (isNew) seen.push(key);
+    const card = el('button', 'card' + (locked || have ? ' locked' : '') + (S.coins < e.cost ? ' poor' : '') + (isNew ? ' new' : ''));
     card.appendChild(iconCanvas(e.id, 64, e.kind));
     card.appendChild(el('div', 'cname', e.name));
     card.appendChild(el('div', 'cnote', locked ? `Unlocks at level ${e.lvl}` : have ? 'Already built' : e.note));
@@ -1515,6 +1522,16 @@ function renderShop() {
     card.onclick = () => { if (locked || have) { sfx('no'); return; } setTool(e.t); closeSheets(); };
     grid.appendChild(card);
   }
+  if (seen.length) { S.seenBuild.push(...seen); dirty(); }
+}
+// unlocked Build-menu items you haven't looked at yet, for the badge on the Build button
+function unseenBuild() {
+  let n = 0; const chk = (kind, id, lvl) => { if (lvl > 1 && lvl <= S.level && !S.seenBuild.includes(kind + ':' + id)) n++; };
+  for (const [k, d] of Object.entries(BIOMES)) chk('enc', k, d.lvl);
+  for (const [k, d] of Object.entries(SHOPS)) chk('shop', k, d.lvl);
+  for (const [k, d] of Object.entries(BUILDINGS)) chk('bld', k, d.lvl);
+  for (const [k, d] of Object.entries(DECOR)) if (!d.event) chk('deco', k, d.lvl);
+  return n;
 }
 // how much it costs to bring each food your animals eat up to `to` units
 function restockPlan(to) { const kept = new Set(keptSpecies().map(k => SPECIES[k].food)); let cost = 0; const add = {}; for (const f of kept) if (S.food[f] < to) { add[f] = to - S.food[f]; cost += add[f] * FOODS[f].price; } return { add, cost: Math.round(cost * 0.95) }; }

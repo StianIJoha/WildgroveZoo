@@ -80,6 +80,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .grid.supplies { grid-template-columns: 1fr; gap: 6px; }
 .card { background: #fff; border-radius: 16px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; box-shadow: inset 0 0 0 1.5px var(--line), 0 2px 0 var(--line); text-align: center; transition: transform .12s; }
 .card:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 2px var(--leaf), 0 3px 0 var(--line); }
+.card { position: relative; }
+.card.new::after { content: 'New'; position: absolute; top: 6px; right: 6px; background: var(--berry); color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .04em; border-radius: 7px; padding: 1px 6px; }
 .card.locked { filter: grayscale(.9); opacity: .6; }
 .cname { font-weight: 800; font-size: 14px; }
 .cnote { font-size: 11px; color: var(--ink-soft); font-weight: 700; min-height: 15px; line-height: 1.3; }
@@ -318,7 +320,7 @@ button.pick:hover { box-shadow: inset 0 0 0 2px var(--leaf); }
   <div class="toolhint" id="toolHint" hidden><span id="toolHintText"></span><button id="toolUndo" hidden title="Undo the last placement (Ctrl+Z)">Undo</button><button id="toolCancel">Done</button></div>
 
   <nav class="dock" aria-label="Tools">
-    <button class="tool primary" id="btnShop" data-tool="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>Build</button>
+    <button class="tool primary" id="btnShop" data-tool="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>Build<span class="badge" id="buildBadge" hidden>0</span></button>
     <button class="tool" id="btnPath" data-tool="path"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21c0-6 8-6 8-12 0-3-2-5-4-6"/><circle cx="8" cy="9" r="1"/><circle cx="16" cy="17" r="1"/></svg>Paths</button>
     <button class="tool" id="btnBulldoze" data-tool="bulldoze"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6-9 9H5v-6z"/><path d="M11 7l6 6"/></svg>Clear</button>
     <button class="tool" id="btnStorage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5v11H3z"/><path d="M7 19v-6h10v6"/><path d="M7 16h10"/></svg>Storage<span class="badge" id="storeBadge" hidden>0</span></button>
@@ -4341,6 +4343,10 @@ function migrate(s) {
   for (const b of Object.keys(COLLECTIONS)) if (!s.cards[b]) s.cards[b] = [0, 0, 0, 0, 0];
   if (!s.tasks) s.tasks = { next: 0, list: [] };
   if (!s.wishLog) s.wishLog = {};
+  if (!s.seenBuild) { // older saves: everything already unlocked counts as seen
+    s.seenBuild = [];
+    for (const [kind, tbl] of [['enc', BIOMES], ['shop', SHOPS], ['bld', BUILDINGS], ['deco', DECOR]]) for (const [k, d] of Object.entries(tbl)) if (d.lvl <= s.level) s.seenBuild.push(kind + ':' + k);
+  }
   s.settings = Object.assign({ muted: false, music: true, night: true }, s.settings);
   for (const o of s.objects) if (o.kind === 'enc' && !o.toys) o.toys = [];
   return s;
@@ -5499,6 +5505,7 @@ function updateHUD() {
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
   const hubN = S.tut >= 0 ? 0 : (Date.now() >= S.wheelNext ? 1 : 0) + Object.keys(COLLECTIONS).filter(b => collComplete(b) && !S.collectionsDone.includes(b)).length + (eventReady() ? 1 : 0);
   $('#hubBadge').hidden = !hubN; $('#hubBadge').textContent = hubN;
+  const bn = S.tut < 0 ? unseenBuild() : 0; $('#buildBadge').hidden = !bn; $('#buildBadge').textContent = bn;
   const storeN = S.storage.animals.length + S.storage.items.length; $('#storeBadge').hidden = !storeN; $('#storeBadge').textContent = storeN;
   const low = S.tut < 0 ? lowFoods() : [], lf = $('#lowFood');
   lf.hidden = !low.length;
@@ -5795,10 +5802,12 @@ function renderShop() {
     : shopTab === 'shop' ? Object.entries(SHOPS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: `${fmt(d.pay)} coins · about ${fmtTime(d.period / ((0.5 + M.meter / 100) * (0.25 + 0.75 * Math.min(1, visitors.length / 12))))} now`, t: { kind: 'shop', type: id } }))
     : shopTab === 'bld' ? Object.entries(BUILDINGS).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.desc, t: { kind: 'bld', type: id }, unique: true }))
     : Object.entries(DECOR).filter(([, d]) => !d.event).map(([id, d]) => ({ id, kind: 'decor', name: d.name, lvl: d.lvl, cost: d.cost, note: d.bin ? 'Less litter nearby' : `+${d.appeal} stars`, t: { kind: 'deco', type: id } }));
+  const seen = [];
   for (const e of entries) {
     const have = e.unique && S.objects.some(o => o.type === e.id);
-    const locked = S.level < e.lvl;
-    const card = el('button', 'card' + (locked || have ? ' locked' : '') + (S.coins < e.cost ? ' poor' : ''));
+    const locked = S.level < e.lvl, key = e.t.kind + ':' + e.id, isNew = !locked && e.lvl > 1 && !S.seenBuild.includes(key);
+    if (isNew) seen.push(key);
+    const card = el('button', 'card' + (locked || have ? ' locked' : '') + (S.coins < e.cost ? ' poor' : '') + (isNew ? ' new' : ''));
     card.appendChild(iconCanvas(e.id, 64, e.kind));
     card.appendChild(el('div', 'cname', e.name));
     card.appendChild(el('div', 'cnote', locked ? `Unlocks at level ${e.lvl}` : have ? 'Already built' : e.note));
@@ -5806,6 +5815,16 @@ function renderShop() {
     card.onclick = () => { if (locked || have) { sfx('no'); return; } setTool(e.t); closeSheets(); };
     grid.appendChild(card);
   }
+  if (seen.length) { S.seenBuild.push(...seen); dirty(); }
+}
+// unlocked Build-menu items you haven't looked at yet, for the badge on the Build button
+function unseenBuild() {
+  let n = 0; const chk = (kind, id, lvl) => { if (lvl > 1 && lvl <= S.level && !S.seenBuild.includes(kind + ':' + id)) n++; };
+  for (const [k, d] of Object.entries(BIOMES)) chk('enc', k, d.lvl);
+  for (const [k, d] of Object.entries(SHOPS)) chk('shop', k, d.lvl);
+  for (const [k, d] of Object.entries(BUILDINGS)) chk('bld', k, d.lvl);
+  for (const [k, d] of Object.entries(DECOR)) if (!d.event) chk('deco', k, d.lvl);
+  return n;
 }
 // how much it costs to bring each food your animals eat up to `to` units
 function restockPlan(to) { const kept = new Set(keptSpecies().map(k => SPECIES[k].food)); let cost = 0; const add = {}; for (const f of kept) if (S.food[f] < to) { add[f] = to - S.food[f]; cost += add[f] * FOODS[f].price; } return { add, cost: Math.round(cost * 0.95) }; }
