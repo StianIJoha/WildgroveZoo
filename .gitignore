@@ -1,0 +1,14 @@
+# Python test output
+tests/screenshots/
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Node (if a build tool is added later)
+node_modules/

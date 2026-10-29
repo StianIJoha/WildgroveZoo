@@ -1,0 +1,106 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Wildgrove Art Preview 2</title>
+<style>body{margin:0;background:#bfe3a3;font-family:sans-serif}canvas{display:block}</style>
+</head><body>
+<canvas id="c"></canvas>
+<script src="../src/art.js"></script>
+<script>
+const Q = new URLSearchParams(location.search);
+const Z = parseFloat(Q.get('z') || '1');
+const SEC = Q.get('s') || 'all';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const SPECIES = Object.keys(ART.animals);
+const NEWDECOR1 = ['feeder','lemonade','fries','toys','icecream','candy','souvenir','trashbin','crate','construction'];
+const BIG = [['nursery',2],['lab',2],['safari',2],['construction2',2],['construction3',3]];
+const NEWICONS = ['hay','fruit','meat','fish','seeds','insects','bamboo','water','pet','play','medicine','sick','paw','silvercoin','hourglass','wheel','card','crate','lock','expand','storage','nurseryicon','labicon','safariicon','trash'];
+const SECS = {
+  animals: { w: 1200, h: 14 * 72 + 30 },
+  decor: { w: 1200, h: 700 },
+  ui: { w: 1200, h: 760 },
+};
+window.errors = [];
+function size() {
+  let w = 1200, h = 0;
+  for (const k in SECS) if (SEC === 'all' || SEC === k) h += SECS[k].h;
+  cv.width = w * Z; cv.height = h * Z; cv.style.width = w * Z + 'px';
+  return [w, h];
+}
+const [W, H] = size();
+function label(x, y, s, c) { ctx.fillStyle = c || '#2e4a22'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, x, y); }
+function cross(x, y) { ctx.strokeStyle = 'rgba(255,0,0,0.6)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3); ctx.stroke(); }
+function diamond(x, y, n) { n = n || 1; ctx.fillStyle = 'rgba(160,210,120,0.9)'; ctx.strokeStyle = 'rgba(80,130,60,0.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 32 * n, y); ctx.lineTo(x, y - 16 * n); ctx.lineTo(x + 32 * n, y); ctx.lineTo(x, y + 16 * n); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(80,130,60,0.3)'; for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(x - 32 * n + 32 * i, y - 16 * i); ctx.lineTo(x + 32 * i, y + 16 * n - 16 * i); ctx.moveTo(x - 32 * n + 32 * i, y + 16 * i); ctx.lineTo(x + 32 * i, y - 16 * n + 16 * i); ctx.stroke(); } }
+function safe(fn, name) { ctx.save(); try { fn(); } catch (e) { window.errors.push(name + ': ' + e.message); console.error(name, e); } ctx.restore(); }
+function drawAll(t) {
+  ctx.setTransform(Z, 0, 0, Z, 0, 0);
+  ctx.fillStyle = '#bfe3a3'; ctx.fillRect(0, 0, W, H);
+  let y0 = 0;
+  if (SEC === 'all' || SEC === 'animals') {
+    // species rows × variants 0..4 + baby v0 + baby v4 + moving v2 flip
+    const CW = 132;
+    SPECIES.forEach((id, r) => {
+      const base = y0 + 58 + r * 72;
+      ctx.fillStyle = r % 2 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.03)'; ctx.fillRect(0, base - 60, W, 72);
+      label(40, base - 20, id);
+      const cells = [[0, {}], [1, {}], [2, {}], [3, {}], [4, {}], ['b0', {baby: true}], ['b3', {baby: true}], ['mv', {moving: true, flip: true}]];
+      cells.forEach(([v, o], i) => {
+        const x = 130 + i * CW * 0.9;
+        const vv = typeof v === 'number' ? v : (v === 'b3' ? 3 : v === 'mv' ? 2 : 0);
+        safe(() => { ctx.translate(x, base); ART.animals[id](ctx, t, Object.assign({variant: vv, sex: (r + i) % 2 ? 'f' : 'm'}, o)); }, id + v);
+        cross(x, base);
+        const nm = typeof v === 'number' ? ART.variantNames[id][v] : v;
+        label(x, base + 10, nm);
+      });
+    });
+    y0 += SECS.animals.h;
+  }
+  if (SEC === 'all' || SEC === 'decor') {
+    NEWDECOR1.forEach((id, i) => {
+      const x = 70 + (i % 5) * 140, base = y0 + 100 + Math.floor(i / 5) * 130;
+      diamond(x, base);
+      safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
+      cross(x, base); label(x, base + 28, id);
+    });
+    // litter
+    for (let k = 0; k < 3; k++) { const x = 780 + k * 60, base = y0 + 100; diamond(x, base); safe(() => { ctx.translate(x, base); ART.decor.litter(ctx, t, k); }, 'litter'); cross(x, base); label(x, base + 28, 'litter ' + k); }
+    // crate + trash + feeder at real scale on a mini path
+    BIG.forEach(([id, n], i) => {
+      const x = [100, 340, 580, 820, 1060][i] - (n === 3 ? 0 : 0), base = y0 + 470 + (n === 3 ? 30 : 0);
+      diamond(x, base, n);
+      safe(() => { ctx.translate(x, base); ART.decor[id](ctx, t); }, id);
+      cross(x, base); label(x, base + 16 * n + 14, id + ' (' + n + 'x' + n + ')');
+    });
+    // tiny scene: shops next to existing ones
+    y0 += SECS.decor.h;
+  }
+  if (SEC === 'all' || SEC === 'ui') {
+    NEWICONS.forEach((id, i) => {
+      const x = 30 + (i % 13) * 66, y = y0 + 30 + Math.floor(i / 13) * 80;
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x - 17, y - 17, 34, 34);
+      safe(() => { ctx.translate(x, y); ART.icons[id](ctx, 32); }, id);
+      safe(() => { ctx.translate(x, y + 34); ART.icons[id](ctx, 18); }, id);
+      label(x, y + 60, id);
+    });
+    const moods = ['happy', 'surprised', 'wink'];
+    moods.forEach((m, i) => {
+      const x = 90 + i * 150, y = y0 + 260;
+      ctx.fillStyle = '#fff6e0'; ctx.fillRect(x - 64, y - 64, 128, 128); ctx.strokeStyle = '#a08060'; ctx.strokeRect(x - 64, y - 64, 128, 128);
+      safe(() => { ctx.translate(x, y); ART.guide(ctx, 128, t, m); }, 'guide');
+      label(x, y + 78, 'guide ' + m);
+      ctx.fillStyle = '#fff6e0'; ctx.fillRect(x - 32, y + 92, 64, 64);
+      safe(() => { ctx.translate(x, y + 124); ART.guide(ctx, 64, t, m); }, 'guide');
+    });
+    const segs = [
+      {color: '#ff5d73', label: '100', icon: 'coin'}, {color: '#ffd23f', label: 'Gem', icon: 'gem'}, {color: '#4cc3ff', label: 'Food x5', icon: 'fruit'},
+      {color: '#7ccf5a', label: '3 Paws', icon: 'paw'}, {color: '#a77bff', label: 'Rare card', icon: 'card'}, {color: '#ff9f43', label: '250', icon: 'coin'},
+      {color: '#5ec8c8', label: 'Medicine', icon: 'medicine'}, {color: '#ff7aa2', label: 'JACKPOT!', icon: 'star'}];
+    safe(() => { ctx.translate(720, y0 + 400); ART.wheel(ctx, 150, t * 0.7, segs); }, 'wheel');
+    safe(() => { ctx.translate(1010, y0 + 330); ART.wheel(ctx, 70, -t, segs.slice(0, 6)); }, 'wheel');
+    safe(() => { ctx.translate(1010, y0 + 500); ART.wheel(ctx, 40, 0, segs.slice(0, 4).map((s) => ({color: s.color, label: s.label, icon: null}))); }, 'wheel');
+    label(720, y0 + 570, 'wheel r=150 (8 segs), r=70, r=40 no icons');
+    // 1x scene row
+    y0 += SECS.ui.h;
+  }
+}
+drawAll(0);
+</script></body></html>
