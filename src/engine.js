@@ -1226,7 +1226,11 @@ function updateHUD() {
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
   $('#rankName').textContent = G.RANKS[S.stats.rank || 0].name;
-  const zn = S.settings.zooName || 'Wildgrove'; if ($('#zooName').textContent !== zn) { $('#zooName').textContent = zn; document.title = zn === 'Wildgrove' ? 'Wildgrove Zoo' : `${zn} · Wildgrove Zoo`; }
+  const zn = S.settings.zooName || 'Wildgrove';
+  if ($('#zooName').textContent !== zn) {
+    $('#zooName').textContent = zn; document.title = zn === 'Wildgrove' ? 'Wildgrove Zoo' : `${zn} · Wildgrove Zoo`;
+    ART.gateLabel = S.settings.zooName || null; for (const k of [...spriteCache.keys()]) if (k.startsWith('gate|')) spriteCache.delete(k);
+  }
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
   if (S.tut < 0) ensureTasks();
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
