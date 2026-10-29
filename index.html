@@ -4196,12 +4196,12 @@ const TOY_SLOTS = 2, TOY_MOOD = 0.06, TOY_PLAY = 0.3;
 // land: owned area grows toward the top-left of the map
 const EXPANSIONS = [
   { ox: 14, oy: 14 },
-  { ox: 17, oy: 14, lvl: 10, cost: 6000,  gems: 15 },
-  { ox: 17, oy: 17, lvl: 13, cost: 12000, gems: 20 },
-  { ox: 20, oy: 17, lvl: 16, cost: 20000, gems: 25 },
-  { ox: 20, oy: 20, lvl: 19, cost: 32000, gems: 30 },
-  { ox: 23, oy: 20, lvl: 22, cost: 48000, gems: 35 },
-  { ox: 23, oy: 23, lvl: 25, cost: 70000, gems: 40 },
+  { ox: 17, oy: 14, lvl: 10, cost: 6000, paws: 15, gems: 15 },
+  { ox: 17, oy: 17, lvl: 13, cost: 12000, paws: 25, gems: 20 },
+  { ox: 20, oy: 17, lvl: 16, cost: 20000, paws: 40, gems: 25 },
+  { ox: 20, oy: 20, lvl: 19, cost: 32000, paws: 60, gems: 30 },
+  { ox: 23, oy: 20, lvl: 22, cost: 48000, paws: 80, gems: 35 },
+  { ox: 23, oy: 23, lvl: 25, cost: 70000, paws: 100, gems: 40 },
 ];
 
 // enclosure upgrades: capacity 4 → 8
@@ -6145,7 +6145,7 @@ function renderHub() {
       ex.appendChild(el('p', '', `Your zoo is ${cur.ox} × ${cur.oy} tiles. The next plot makes it ${nx.ox} × ${nx.oy}.`));
       const r = el('div', 'row wrap');
       const lvOk = S.level >= nx.lvl;
-      r.appendChild(hbtn('btn', `Expand ${priceTag({ coins: nx.cost })}${lvOk ? '' : ` <small>(level ${nx.lvl})</small>`}`, () => { if (!lvOk) { toast(`Reach level ${nx.lvl} first, or expand with gems`, 'warn'); return; } if (pay({ coins: nx.cost })) expand(); }, !lvOk));
+      r.appendChild(hbtn('btn', `Expand ${priceTag({ coins: nx.cost, paws: nx.paws })}${lvOk ? '' : ` <small>(level ${nx.lvl})</small>`}`, () => { if (!lvOk) { toast(`Reach level ${nx.lvl} first, or expand with gems`, 'warn'); return; } if (pay({ coins: nx.cost, paws: nx.paws })) expand(); }, !lvOk));
       if (!lvOk) r.appendChild(hbtn('btn gem', `Expand now ${priceTag({ gems: nx.gems })}`, () => { if (pay({ gems: nx.gems })) expand(); }));
       ex.appendChild(r);
     } else ex.appendChild(el('p', '', 'You own all the land.'));
@@ -6247,7 +6247,7 @@ function advice() {
     babies: 'Babies make visitors happy! Keep a happy pair together and there\'s room in the enclosure, and a baby will follow.' };
   const worst = Object.keys(tips).sort((a, b) => (P[a] || 0) - (P[b] || 0))[0];
   if (M.meter < 85 && P[worst] < 0.75) return { mood: 'happy', text: `Zoo meter ${M.meter}%. ${tips[worst]}` };
-  const nx = EXPANSIONS[S.owned + 1]; if (nx && S.level >= nx.lvl && S.coins >= nx.cost) return { mood: 'wink', text: `You can afford more land! Expand in the Zoo office.`, go: () => openHub('office') };
+  const nx = EXPANSIONS[S.owned + 1]; if (nx && S.level >= nx.lvl && S.coins >= nx.cost && S.paws >= (nx.paws || 0)) return { mood: 'wink', text: `You can afford more land! Expand in the Zoo office.`, go: () => openHub('office') };
   const facts = Object.values(COLLECTIONS).flatMap(c => c.cards);
   return { mood: 'happy', text: `Everything looks wonderful, director. Did you know? ${pick(facts)}` };
 }

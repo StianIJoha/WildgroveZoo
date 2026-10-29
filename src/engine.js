@@ -1777,7 +1777,7 @@ function renderHub() {
       ex.appendChild(el('p', '', `Your zoo is ${cur.ox} × ${cur.oy} tiles. The next plot makes it ${nx.ox} × ${nx.oy}.`));
       const r = el('div', 'row wrap');
       const lvOk = S.level >= nx.lvl;
-      r.appendChild(hbtn('btn', `Expand ${priceTag({ coins: nx.cost })}${lvOk ? '' : ` <small>(level ${nx.lvl})</small>`}`, () => { if (!lvOk) { toast(`Reach level ${nx.lvl} first, or expand with gems`, 'warn'); return; } if (pay({ coins: nx.cost })) expand(); }, !lvOk));
+      r.appendChild(hbtn('btn', `Expand ${priceTag({ coins: nx.cost, paws: nx.paws })}${lvOk ? '' : ` <small>(level ${nx.lvl})</small>`}`, () => { if (!lvOk) { toast(`Reach level ${nx.lvl} first, or expand with gems`, 'warn'); return; } if (pay({ coins: nx.cost, paws: nx.paws })) expand(); }, !lvOk));
       if (!lvOk) r.appendChild(hbtn('btn gem', `Expand now ${priceTag({ gems: nx.gems })}`, () => { if (pay({ gems: nx.gems })) expand(); }));
       ex.appendChild(r);
     } else ex.appendChild(el('p', '', 'You own all the land.'));
@@ -1879,7 +1879,7 @@ function advice() {
     babies: 'Babies make visitors happy! Keep a happy pair together and there\'s room in the enclosure, and a baby will follow.' };
   const worst = Object.keys(tips).sort((a, b) => (P[a] || 0) - (P[b] || 0))[0];
   if (M.meter < 85 && P[worst] < 0.75) return { mood: 'happy', text: `Zoo meter ${M.meter}%. ${tips[worst]}` };
-  const nx = EXPANSIONS[S.owned + 1]; if (nx && S.level >= nx.lvl && S.coins >= nx.cost) return { mood: 'wink', text: `You can afford more land! Expand in the Zoo office.`, go: () => openHub('office') };
+  const nx = EXPANSIONS[S.owned + 1]; if (nx && S.level >= nx.lvl && S.coins >= nx.cost && S.paws >= (nx.paws || 0)) return { mood: 'wink', text: `You can afford more land! Expand in the Zoo office.`, go: () => openHub('office') };
   const facts = Object.values(COLLECTIONS).flatMap(c => c.cards);
   return { mood: 'happy', text: `Everything looks wonderful, director. Did you know? ${pick(facts)}` };
 }

@@ -146,12 +146,12 @@ const TOY_SLOTS = 2, TOY_MOOD = 0.06, TOY_PLAY = 0.3;
 // land: owned area grows toward the top-left of the map
 const EXPANSIONS = [
   { ox: 14, oy: 14 },
-  { ox: 17, oy: 14, lvl: 10, cost: 6000,  gems: 15 },
-  { ox: 17, oy: 17, lvl: 13, cost: 12000, gems: 20 },
-  { ox: 20, oy: 17, lvl: 16, cost: 20000, gems: 25 },
-  { ox: 20, oy: 20, lvl: 19, cost: 32000, gems: 30 },
-  { ox: 23, oy: 20, lvl: 22, cost: 48000, gems: 35 },
-  { ox: 23, oy: 23, lvl: 25, cost: 70000, gems: 40 },
+  { ox: 17, oy: 14, lvl: 10, cost: 6000, paws: 15, gems: 15 },
+  { ox: 17, oy: 17, lvl: 13, cost: 12000, paws: 25, gems: 20 },
+  { ox: 20, oy: 17, lvl: 16, cost: 20000, paws: 40, gems: 25 },
+  { ox: 20, oy: 20, lvl: 19, cost: 32000, paws: 60, gems: 30 },
+  { ox: 23, oy: 20, lvl: 22, cost: 48000, paws: 80, gems: 35 },
+  { ox: 23, oy: 23, lvl: 25, cost: 70000, paws: 100, gems: 40 },
 ];
 
 // enclosure upgrades: capacity 4 → 8
