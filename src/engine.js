@@ -1038,7 +1038,18 @@ cv.addEventListener('pointerdown', e => {
   const pan = e.button === 1 || e.button === 2 || spaceDown;
   drag = { sx: e.offsetX, sy: e.offsetY, camx: cam.x, camy: cam.y, moved: false, pan, paint: !pan && tool && (tool.kind === 'path' || tool.kind === 'bulldoze') };
   if (drag.paint) { const g = toGrid(e.offsetX, e.offsetY); place(g.x, g.y); drag.lastG = g.x + ',' + g.y; }
+  // long-press (touch or mouse) with no tool: open the panel for whatever is under the finger
+  else if (!tool && !pan) { const d = drag; d.long = setTimeout(() => { if (drag === d && !d.moved) { d.longFired = true; longPress(d.sx, d.sy); } }, 520); }
 });
+function longPress(sx, sy) {
+  const w = toWorld(sx, sy);
+  let best = null, bd = 22;
+  for (const e of S.objects) if (e.kind === 'enc' && !e.build) for (const a of e.animals) { const p = iso(e.gx + a.lx, e.gy + a.ly); const d = Math.hypot(w.x - p.x, w.y - (p.y - 14)); if (d < bd) { bd = d; best = e; } }
+  const g = toGrid(sx, sy), o = best || (inGrid(g.x, g.y) && occ[g.x][g.y]);
+  if (!o) return;
+  try { navigator.vibrate && navigator.vibrate(12); } catch (er) {}
+  select(o); sfx('path');
+}
 cv.addEventListener('pointermove', e => {
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
   const g = toGrid(e.offsetX, e.offsetY); const off = toolOffset(tool); hover = { x: g.x - off, y: g.y - off };
@@ -1048,7 +1059,7 @@ cv.addEventListener('pointermove', e => {
   if (drag.paint) { if (!tool) { drag = null; return; } const k = g.x + ',' + g.y; if (k !== drag.lastG) { drag.lastG = k; if (tool.kind === 'path') paintPath(g.x, g.y); else bulldoze(g.x, g.y, true); } return; }
   if (drag.moved) { cam.x = drag.camx - dx / cam.z; cam.y = drag.camy - dy / cam.z; clampCam(); cv.style.cursor = 'grabbing'; }
 });
-function endPointer(e) { pointers.delete(e.pointerId); if (pinch) { if (pointers.size < 2) pinch = null; drag = null; return; } if (drag && !drag.moved && !drag.paint && !drag.pan) tap(e.offsetX, e.offsetY); drag = null; cv.style.cursor = ''; }
+function endPointer(e) { pointers.delete(e.pointerId); if (drag && drag.long) clearTimeout(drag.long); if (drag && drag.longFired) { drag = null; return; } if (pinch) { if (pointers.size < 2) pinch = null; drag = null; return; } if (drag && !drag.moved && !drag.paint && !drag.pan) tap(e.offsetX, e.offsetY); drag = null; cv.style.cursor = ''; }
 cv.addEventListener('pointerup', endPointer); cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('pointerleave', () => { if (!drag) hover = null; });
 cv.addEventListener('wheel', e => { e.preventDefault(); const b = toWorld(e.offsetX, e.offsetY); cam.z *= Math.exp(-e.deltaY * 0.0015); clampCam(); const a = toWorld(e.offsetX, e.offsetY); cam.x += b.x - a.x; cam.y += b.y - a.y; clampCam(); }, { passive: false });
@@ -1471,7 +1482,8 @@ function renderStorage() {
   for (const [k, l] of [['animals', `Animals (${S.storage.animals.length})`], ['items', `Items (${S.storage.items.length})`], ['stock', 'Food & medicine']]) { const b = el('button', 'tab' + (k === storageTab ? ' on' : ''), l); b.onclick = () => { storageTab = k; placeFor = null; renderStorage(); }; tabs.appendChild(b); }
   if (storageTab === 'animals') {
     if (!S.storage.animals.length) box.appendChild(el('p', 'empty', 'No animals in storage. Animals from the wheel, the safari, the nursery and the lab arrive here.'));
-    for (const r of S.storage.animals) {
+    const order = Object.keys(SPECIES), sorted = [...S.storage.animals].sort((a, b) => order.indexOf(a.species) - order.indexOf(b.species) || b.variant - a.variant || (a.sex < b.sex ? -1 : 1));
+    for (const r of sorted) {
       const row = el('div', 'pick');
       row.appendChild(iconCanvas(r.species, 30, 'animal', { variant: r.variant, baby: r.baby }));
       row.appendChild(el('span', 'pn', `<span class="sex ${r.sex}">${r.sex === 'm' ? '♂' : '♀'}</span> ${r.name}${r.baby ? ' <small>baby</small>' : ''}<br><small>${VNAME(r.species, r.variant)}${r.variant ? ' · ' + DEGREE[r.variant] : ''}</small>`));

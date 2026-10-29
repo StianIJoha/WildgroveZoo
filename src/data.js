@@ -30,6 +30,8 @@ const SPECIES = {
   elephant:  { name: 'Elephant',   lvl: 14, cost: 3000, food: 'hay',     appeal: 32, biome: 'lagoon',  breed: 600, grow: 1200, speed: 0.3,  care: 1.3 },
   seal:      { name: 'Seal',       lvl: 5,  cost: 480,  food: 'fish',    appeal: 10, biome: 'coast',   breed: 330, grow: 640,  speed: 0.35, care: 1.0 },
   otter:     { name: 'Otter',      lvl: 8,  cost: 950,  food: 'fish',    appeal: 16, biome: 'coast',   breed: 430, grow: 840,  speed: 0.7,  care: 1.1 },
+  fennec:    { name: 'Fennec fox', lvl: 6,  cost: 650,  food: 'insects', appeal: 12, biome: 'desert',  breed: 360, grow: 700,  speed: 0.85, care: 0.95 },
+  camel:     { name: 'Camel',      lvl: 13, cost: 2300, food: 'hay',     appeal: 28, biome: 'desert',  breed: 560, grow: 1100, speed: 0.35, care: 1.2 },
   turtle:    { name: 'Sea turtle', lvl: 11, cost: 1800, food: 'kelp',    appeal: 24, biome: 'coast',   breed: 540, grow: 1040, speed: 0.2,  care: 1.2 },
 };
 // how far above the feet the need icon floats, per species (default 42)
