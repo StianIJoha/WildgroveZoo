@@ -323,6 +323,14 @@ function computeMeter() {
   const gateOpen = [...reach].length > 1;
   M = { meter, attraction: Math.round(att), parts, target: gateOpen ? Math.min(80, Math.floor(att / 3 * (0.4 + 0.6 * meter / 100))) : 0 };
   if (meter > S.stats.peakMeter && n) S.stats.peakMeter = meter;
+  checkRank();
+}
+const rankOf = stars => { let r = 0; G.RANKS.forEach((k, i) => { if (stars >= k.stars) r = i; }); return r; };
+function checkRank() {
+  if (S.tut >= 0) return;
+  const r = rankOf(M.attraction); if (r <= (S.stats.rank || 0)) return;
+  S.stats.rank = r; const R = G.RANKS[r]; S.gems += R.gems || 0;
+  toast(`Your zoo is now a ${R.name}! +${R.gems} gems`, 'level'); sfx('level'); dirty();
 }
 const ticketPrice = () => 1 + Math.floor(S.level / 3);
 
@@ -1115,6 +1123,7 @@ function updateHUD() {
   $('#coins').textContent = fmt(S.coins); $('#gems').textContent = S.gems; $('#paws').textContent = S.paws;
   $('#lvl').textContent = S.level; $('#xpfill').style.width = Math.min(100, S.xp / xpFor(S.level) * 100) + '%'; $('#xptext').textContent = `${Math.floor(S.xp)} / ${xpFor(S.level)} XP`;
   $('#meterfill').style.width = M.meter + '%'; $('#meterfill').className = M.meter < 40 ? 'low' : M.meter < 70 ? 'mid' : ''; $('#metertext').textContent = M.meter + '%';
+  $('#rankName').textContent = G.RANKS[S.stats.rank || 0].name;
   $('#visitors').textContent = visitors.length; $('#stars').textContent = M.attraction;
   if (S.tut < 0) ensureTasks();
   const q = S.tut < 0 ? activeQuests().filter(x => x.done).length + tasksReady() : 0; $('#questBadge').hidden = !q; $('#questBadge').textContent = q;
@@ -1123,7 +1132,7 @@ function updateHUD() {
   const storeN = S.storage.animals.length + S.storage.items.length; $('#storeBadge').hidden = !storeN; $('#storeBadge').textContent = storeN;
   const low = S.tut < 0 ? lowFoods() : [], lf = $('#lowFood');
   lf.hidden = !low.length;
-  if (low.length) { const key = low.join(); if (lf.dataset.k !== key) { lf.dataset.k = key; lf.innerHTML = `${ic(low[0], 18)}<span>Low ${low.map(f => FOODS[f].name.toLowerCase()).join(', ')}</span>`; } }
+  if (low.length) { const key = low.join(); if (lf.dataset.k !== key) { lf.dataset.k = key; lf.innerHTML = `${ic(low[0], 18)}<span>Low ${low.slice(0, 2).map(f => FOODS[f].name.toLowerCase()).join(', ')}${low.length > 2 ? ` +${low.length - 2}` : ''}</span>`; } }
   const night = DK > 0.5, dc = $('#btnDay'); if (dc.dataset.n !== String(night) || !dc.firstChild) { dc.dataset.n = night; dc.innerHTML = ''; dc.appendChild(iconCanvas(night ? 'moon' : 'sun', 20, 'icon')); }
   dc.hidden = !S.settings.night || S.tut >= 0;
   dc.title = `${night ? 'Night' : 'Day'} · ${night ? 'sunrise' : 'nightfall'} in ${fmtTime(timeToChange())}. Fewer visitors come at night, and animals sleep.`;
@@ -1660,6 +1669,8 @@ function renderHub() {
     const P = M.parts || {};
     ex.appendChild(el('div', 'meterparts', [['Animal mood', P.mood, 40], ['Tidiness', P.clean, 25], ['Variety', P.variety, 15], ['Decor', P.decor, 10], ['Babies', P.babies, 10]].map(([l, v, w]) => `<div class="bar"><span>${l}</span><i><b style="width:${Math.round((v || 0) * 100)}%"></b></i><small>${w}%</small></div>`).join('')));
     ex.appendChild(el('p', 'hint', `${M.attraction} attraction stars · up to ${M.target} visitors · tickets ${ticketPrice()} coins each`));
+    const rk = S.stats.rank || 0, nr = G.RANKS[rk + 1];
+    ex.appendChild(el('p', 'hint', `${ic('trophy', 16)} Rank: <b>${G.RANKS[rk].name}</b>${nr ? ` · ${nr.name} at ${nr.stars} stars (+${nr.gems} gems)` : ' · the top rank!'}`));
     const wl = Object.entries(S.wishLog).sort((a, b) => b[1] - a[1]).slice(0, 4);
     if (wl.length) { ex.appendChild(el('h3', '', 'Visitor wishes')); ex.appendChild(el('p', 'hint', `Granted ${S.stats.wishes}. Most missed: ${wl.map(([k, n]) => { const [kind, key] = k.split(':'); return `${wishName({ kind, key })} (${n}×)`; }).join(', ')}.`)); }
     ex.appendChild(el('h3', '', 'Settings'));

@@ -268,6 +268,17 @@ const DAILY = [
 ];
 const TASK_EVERY = 4 * 3600 * 1000;
 
+// zoo rank: reached by attraction stars, pays gems once per new rank
+const RANKS = [
+  { name: 'Backyard zoo', stars: 0 },
+  { name: 'Petting farm', stars: 50, gems: 2 },
+  { name: 'Town zoo', stars: 140, gems: 3 },
+  { name: 'City zoo', stars: 300, gems: 4 },
+  { name: 'Regional zoo', stars: 550, gems: 5 },
+  { name: 'National zoo', stars: 900, gems: 7 },
+  { name: 'World-famous zoo', stars: 1400, gems: 10 },
+];
+
 // day/night: one full day takes DAY_LENGTH game seconds; night darkens the zoo, lights glow, fewer visitors
 const DAY_LENGTH = 900;
 
@@ -288,5 +299,5 @@ const VISITOR_SKINS = ['#f6d3b3', '#e8b48f', '#c98e64', '#9a6644', '#6e4630'];
 const VISITOR_HAIRS = ['#2b1d14', '#5a3a22', '#c78a3b', '#1d1d1d', '#8a4b2a', '#e0c070'];
 const NAMES = ['Pip', 'Mochi', 'Biscuit', 'Juniper', 'Pebble', 'Clover', 'Nori', 'Waffle', 'Hazel', 'Tofu', 'Maple', 'Ziggy', 'Olive', 'Pickles', 'Rumi', 'Saffron', 'Bean', 'Kiwi', 'Marlo', 'Fig', 'Sunny', 'Bramble', 'Poppy', 'Taro', 'Luna', 'Otis', 'Willow', 'Nugget', 'Cosmo', 'Dot', 'Honey', 'Basil', 'Jasper', 'Mabel', 'Gus', 'Ivy', 'Peanut', 'Ruby', 'Sprout', 'Theo', 'Frida', 'Odin', 'Sigrid', 'Bjørn', 'Tuva'];
 
-return { EVENTS, EVENT_POINTS, EVENT_TRACK, BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
+return { RANKS, EVENTS, EVENT_POINTS, EVENT_TRACK, BIOMES, SPECIES, SPECIES_TOP, FOODS, MEDICINE_PRICE, START_MEDICINE, TOYS, TOY_SLOTS, TOY_MOOD, TOY_PLAY, DAILY, TASK_EVERY, DAY_LENGTH, NEED_BASE, NEED_LABEL, SHOPS, BUILDINGS, DECOR, EXPANSIONS, UPGRADES, HELPERS, SAFARI, WHEEL, WHEEL_WEIGHTS, WHEEL_FREE_EVERY, COLLECTIONS, QUESTS, TUTORIAL, VISITOR_SHIRTS, VISITOR_SKINS, VISITOR_HAIRS, NAMES };
 })();
